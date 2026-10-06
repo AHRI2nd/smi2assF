@@ -22,12 +22,12 @@
 import argparse
 import chardet
 import html
-import os
 import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from operator import itemgetter
+from pathlib import Path
 from bs4 import BeautifulSoup, NavigableString
 
 default_lang_code = 'kor'
@@ -393,6 +393,23 @@ def _parse_timestamp(raw_value, source, source_offset, diagnostics):
     return None
 
 
+def ass_bgr_color(color_value):
+    color_value = str(color_value).strip().lower()
+    if color_value in css3_names_to_hex:
+        color_value = css3_names_to_hex[color_value]
+
+    match = re.fullmatch(r'#?([0-9a-f]{6})', color_value)
+    if match is None:
+        return None
+
+    red, green, blue = (
+        match.group(1)[0:2],
+        match.group(1)[2:4],
+        match.group(1)[4:6],
+    )
+    return blue + green + red
+
+
 def smi2ass(smi_sgml):
     return convert_smi(smi_sgml)[0]
 
@@ -440,14 +457,15 @@ def convert_smi(smi_sgml):
     )
     ass_dict = {}
     for lang_idx, lang in enumerate(mln):
-        ass_lines = smi2ass_internal(mln[lang])
+        ass_lines = smi2ass_internal(mln[lang], diagnostics)
         if len(ass_lines) > 0:
             asscontents = (script_info+styles+events+''.join(ass_lines)).encode('utf-8')
             ass_dict[longlang[lang_idx]] = asscontents
 
     return ass_dict, diagnostics
 
-def smi2ass_internal (sln):
+def smi2ass_internal(sln, diagnostics=None):
+    diagnostics = diagnostics if diagnostics is not None else []
     ass_lines = []
     for line_idx, entry in enumerate(sln):
         if line_idx + 1 < len(sln):
@@ -505,21 +523,20 @@ def smi2ass_internal (sln):
 
             colors = p_tags.find_all('font')
             for color in colors:
-                try: # bad cases : '<font size=30>'
-                    col = color['color']
-                except:
-                    col = None
-                if not col == None:
-                    hexcolor = re.search('[0-9a-fA-F]{6}',color['color'].lower()) # bad cases : '23df34'
-                    if hexcolor is not None:
-                        converted_color = '{\\c&H' + hexcolor.group(0)[::-1]+'&}' + color.text + '{\\c}'
+                col = color.get('color')
+                if col is not None:
+                    bgr_color = ass_bgr_color(col)
+                    if bgr_color is None:
+                        diagnostics.append(ConversionDiagnostic(
+                            code='UNKNOWN_COLOR',
+                            severity='warning',
+                            line=entry.line,
+                            message='Kept text with unsupported font color %r.' % col,
+                        ))
+                        color.replace_with(NavigableString(color.text))
                     else:
-                        try:
-                            converted_color = '{\\c&H' + css3_names_to_hex[color['color'].lower()][::-1].replace('#','&}') + color.text + '{\\c}'
-                        except: # bad cases : 'skybule'
-                            converted_color = color.text
-                            print('Failed to convert a color name: %s' % color['color'].lower())
-                    color.replace_with(NavigableString(converted_color))
+                        converted_color = '{\\c&H' + bgr_color + '&}' + color.text + '{\\c}'
+                        color.replace_with(NavigableString(converted_color))
 
             contents = p_tags.text
             contents = re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', contents)
@@ -533,15 +550,11 @@ def smi2ass_internal (sln):
 
 
 def ms2timecode(ms):
-    hours = int(ms / 3600000)
-    ms -= hours * 3600000
-    minutes = int(ms / 60000)
-    ms -= minutes * 60000
-    seconds = int(ms / 1000)
-    ms -= seconds * 1000
-    ms = round(ms/10)
-    timecode = '%01d:%02d:%02d.%02d' % (hours, minutes, seconds, ms)
-    return timecode
+    centiseconds = (int(ms) + 5) // 10
+    hours, centiseconds = divmod(centiseconds, 360000)
+    minutes, centiseconds = divmod(centiseconds, 6000)
+    seconds, centiseconds = divmod(centiseconds, 100)
+    return '%01d:%02d:%02d.%02d' % (hours, minutes, seconds, centiseconds)
 
 
 def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
@@ -663,13 +676,15 @@ def convert_file(smi_path):
     with open(smi_path, 'r', encoding=smi_encoding, errors='replace') as smi_file:
         smi_sgml = smi_file.read()
     ass_dict, diagnostics = convert_smi(smi_sgml)
+    input_path = Path(smi_path)
+    output_stem = input_path.stem if input_path.suffix else input_path.name
     for lang in ass_dict:
-        if len(lang) == 0:
-            ass_path = smi_path[:smi_path.rfind('.')] + '.' + default_lang_code + '.ass'
-        else:
-            ass_path = smi_path[:smi_path.rfind('.')] + '.' + lang + '.ass'
+        output_language = lang or default_lang_code
+        ass_path = input_path.with_name(
+            '%s.%s.ass' % (output_stem, output_language),
+        )
 
-        with open(ass_path, 'wb') as ass_file:
+        with ass_path.open('wb') as ass_file:
             ass_file.write(ass_dict[lang])
 
     for diagnostic in diagnostics:
