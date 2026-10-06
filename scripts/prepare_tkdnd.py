@@ -33,6 +33,20 @@ def needs_tcl9_intel_binary(system, machine, tcl_major):
     return system == 'Darwin' and machine == 'x86_64' and tcl_major >= 9
 
 
+def ensure_windows_tcl9_package_index(tkdnd_directory):
+    tkdnd_directory = Path(tkdnd_directory)
+    source_index = tkdnd_directory / 'win-x64' / 'pkgIndex.tcl'
+    target_index = tkdnd_directory / 'win-x64-tcl9' / 'pkgIndex.tcl'
+    if target_index.is_file():
+        return False
+    if not source_index.is_file():
+        raise FileNotFoundError('TkDND Windows package index is missing.')
+
+    target_index.parent.mkdir(parents=True, exist_ok=True)
+    target_index.write_bytes(source_index.read_bytes())
+    return True
+
+
 def install_tkdnd_archive(
     archive_bytes,
     target_directory,
@@ -69,13 +83,24 @@ def install_tkdnd_archive(
 
 
 def main():
-    if platform.system() != 'Darwin' or platform.machine() != 'x86_64':
+    system = platform.system()
+    machine = platform.machine()
+    is_intel_macos = system == 'Darwin' and machine == 'x86_64'
+    is_windows_x64 = system == 'Windows' and machine in {'AMD64', 'x86_64'}
+    if not is_intel_macos and not is_windows_x64:
         return 0
 
     import tkinter
     import tkinterdnd2
 
     tcl_major = int(tkinter.Tcl().eval('info patchlevel').split('.')[0])
+    if is_windows_x64 and tcl_major >= 9:
+        package_directory = Path(tkinterdnd2.__file__).resolve().parent
+        tkdnd_directory = package_directory / 'tkdnd'
+        if ensure_windows_tcl9_package_index(tkdnd_directory):
+            print('Restored the Windows Tcl 9 TkDND package index.')
+        return 0
+
     if not needs_tcl9_intel_binary('Darwin', 'x86_64', tcl_major):
         return 0
 
