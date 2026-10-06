@@ -26,8 +26,9 @@ import os
 import re
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from operator import itemgetter
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 
 default_lang_code = 'kor'
 default_font_name = 'sans-serif'
@@ -220,17 +221,196 @@ space_chars = [
     u'\u00A0', u'\u180E', u'\u2000', u'\u2001', u'\u2002', u'\u2003', u'\u2004', u'\u2005', u'\u2006',
     u'\u2007', u'\u2008', u'\u2009', u'\u200A', u'\u200B', u'\u202F', u'\u205F', u'\u3000' ]
 
+@dataclass(frozen=True)
+class ConversionDiagnostic:
+    code: str
+    severity: str
+    line: int
+    message: str
+
+
+@dataclass(frozen=True)
+class SyncEntry:
+    tag: object
+    timestamp: int
+    line: int
+
+
+SYNC_TOKEN_RE = re.compile(r'<\s*(/?)\s*sync\b[^>]*>', re.IGNORECASE)
+SYNC_OPEN_RE = re.compile(r'<\s*sync\b[^>]*>', re.IGNORECASE)
+FORMAT_TAG_RE = re.compile(r'<\s*(/?)\s*(b|i|u|s|font|rt)\b[^>]*>', re.IGNORECASE)
+TIMESTAMP_RE = re.compile(r'^\s*([+-]?\d+)\s*$')
+TIMESTAMP_SUFFIX_RE = re.compile(r'^\s*(\d+)([?!.,;:]+)\s*$')
+
+
+def _line_number(source, offset):
+    return source.count('\n', 0, offset) + 1
+
+
+def _add_diagnostic(diagnostics, source, code, severity, offset, message):
+    diagnostics.append(ConversionDiagnostic(
+        code=code,
+        severity=severity,
+        line=_line_number(source, offset),
+        message=message,
+    ))
+
+
+def _repair_sync_boundaries(source, diagnostics):
+    repaired = []
+    cursor = 0
+    current_sync = None
+
+    for match in SYNC_TOKEN_RE.finditer(source):
+        repaired.append(source[cursor:match.start()])
+        token = match.group(0)
+        is_closing = bool(match.group(1))
+
+        if is_closing:
+            if current_sync is None:
+                _add_diagnostic(
+                    diagnostics, source, 'SYNC_CLOSE_REMOVED', 'repair',
+                    match.start(), 'Removed a closing SYNC tag without an open SYNC tag.',
+                )
+            else:
+                repaired.append(token)
+                current_sync = None
+        else:
+            if current_sync is not None:
+                repaired.append('</sync>')
+                _add_diagnostic(
+                    diagnostics, source, 'SYNC_CLOSE_INSERTED', 'repair',
+                    current_sync, 'Inserted a closing SYNC tag before the next SYNC tag.',
+                )
+            repaired.append(token)
+            current_sync = match.start()
+        cursor = match.end()
+
+    repaired.append(source[cursor:])
+    return ''.join(repaired)
+
+
+def _repair_formatting_tags(source, diagnostics):
+    sync_matches = list(SYNC_OPEN_RE.finditer(source))
+    if not sync_matches:
+        return source
+
+    repaired = []
+    cursor = 0
+    for index, sync_match in enumerate(sync_matches):
+        next_sync = sync_matches[index + 1].start() if index + 1 < len(sync_matches) else len(source)
+        repaired.append(source[cursor:sync_match.end()])
+        region = source[sync_match.end():next_sync]
+        region_start = sync_match.end()
+        region_output = []
+        region_cursor = 0
+        stack = []
+
+        for match in FORMAT_TAG_RE.finditer(region):
+            region_output.append(region[region_cursor:match.start()])
+            token = match.group(0)
+            closing = bool(match.group(1))
+            tag_name = match.group(2).lower()
+
+            if not closing and not token.rstrip().endswith('/>'):
+                stack.append((tag_name, region_start + match.start()))
+                region_output.append(token)
+            elif closing:
+                stack_index = next(
+                    (stack_index for stack_index in range(len(stack) - 1, -1, -1)
+                     if stack[stack_index][0] == tag_name),
+                    None,
+                )
+                if stack_index is None:
+                    _add_diagnostic(
+                        diagnostics, source, 'FORMAT_CLOSE_REMOVED', 'repair',
+                        region_start + match.start(),
+                        'Removed an unmatched closing %s tag.' % tag_name,
+                    )
+                else:
+                    while len(stack) - 1 > stack_index:
+                        unclosed_tag, opening_offset = stack.pop()
+                        region_output.append('</%s>' % unclosed_tag)
+                        _add_diagnostic(
+                            diagnostics, source, 'FORMAT_CLOSE_INSERTED', 'repair',
+                            opening_offset,
+                            'Closed an unclosed %s tag before mismatched markup.' % unclosed_tag,
+                        )
+                    stack.pop()
+                    region_output.append(token)
+            else:
+                region_output.append(token)
+            region_cursor = match.end()
+
+        region_output.append(region[region_cursor:])
+        while stack:
+            tag_name, opening_offset = stack.pop()
+            region_output.append('</%s>' % tag_name)
+            _add_diagnostic(
+                diagnostics, source, 'FORMAT_CLOSE_INSERTED', 'repair',
+                opening_offset, 'Closed an unclosed %s tag at the end of its SYNC cue.' % tag_name,
+            )
+        repaired.append(''.join(region_output))
+        cursor = next_sync
+
+    repaired.append(source[cursor:])
+    return ''.join(repaired)
+
+
+def _parse_timestamp(raw_value, source, source_offset, diagnostics):
+    if raw_value is None:
+        _add_diagnostic(
+            diagnostics, source, 'INVALID_TIMESTAMP', 'skip', source_offset,
+            'Skipped a cue with no Start timestamp.',
+        )
+        return None
+
+    match = TIMESTAMP_RE.fullmatch(str(raw_value))
+    if match:
+        timestamp = int(match.group(1))
+        if timestamp < 0:
+            _add_diagnostic(
+                diagnostics, source, 'INVALID_TIMESTAMP', 'skip', source_offset,
+                'Skipped a cue with a negative Start timestamp.',
+            )
+            return None
+        return timestamp
+
+    match = TIMESTAMP_SUFFIX_RE.fullmatch(str(raw_value))
+    if match:
+        timestamp = int(match.group(1))
+        _add_diagnostic(
+            diagnostics, source, 'TIMESTAMP_SUFFIX_REMOVED', 'repair', source_offset,
+            'Removed trailing punctuation from Start=%s; using %s milliseconds.' %
+            (raw_value, timestamp),
+        )
+        return timestamp
+
+    _add_diagnostic(
+        diagnostics, source, 'INVALID_TIMESTAMP', 'skip', source_offset,
+        'Skipped a cue with an ambiguous Start timestamp: %r.' % raw_value,
+    )
+    return None
+
+
 def smi2ass(smi_sgml):
+    return convert_smi(smi_sgml)[0]
+
+
+def convert_smi(smi_sgml):
+    diagnostics = []
+    smi_sgml = _repair_sync_boundaries(smi_sgml, diagnostics)
+    smi_sgml = _repair_formatting_tags(smi_sgml, diagnostics)
+    diagnostic_source = smi_sgml
+    sync_offsets = [match.start() for match in SYNC_OPEN_RE.finditer(diagnostic_source)]
+    sync_lines = [_line_number(diagnostic_source, offset) for offset in sync_offsets]
+
     # CRLF, LF or tab to a whitespace
     smi_sgml = smi_sgml.replace(u'\u000D\u000A', u' ')
     smi_sgml = smi_sgml.replace(u'\u000A', u' ')
     smi_sgml = smi_sgml.replace(u'\u000D', u' ')
     smi_sgml = smi_sgml.replace('\t', ' ')
 
-    # Close the <sync> tags to avoid tag recursion.
-    smi_sgml = re.sub(r'</ *[Ss][Yy][Nn][Cc] *>', '', smi_sgml) # Remove </sync>
-    smi_sgml = re.sub(r'< *[Ss][Yy][Nn][Cc] +', '</sync><sync ', smi_sgml) # Add </sync> right before <sync>
-    
     # Replace special space characters so that BeautifulSoup can't remove them.
     for spaceChar in space_chars:
         smi_sgml = smi_sgml.replace(spaceChar, 'smi2ass_unicode(' + str(ord(spaceChar)) + ')')
@@ -246,32 +426,34 @@ def smi2ass(smi_sgml):
     #Parse lines with BeautifulSoup based on sync tag
     soup = BeautifulSoup(smi_sgml, 'html.parser')
     smi_lines = soup.find_all('sync')
+    if not smi_lines:
+        diagnostics.append(ConversionDiagnostic(
+            code='NO_SYNC_CUES',
+            severity='skip',
+            line=1,
+            message='No SYNC cues were found in the input.',
+        ))
+        return {}, diagnostics
 
-    #separate multi-language subtitle into a sperate list
-    mln, longlang = separate_by_lang(smi_lines)
+    mln, longlang = separate_by_lang(
+        smi_lines, diagnostic_source, sync_offsets, sync_lines, diagnostics,
+    )
     ass_dict = {}
     for lang_idx, lang in enumerate(mln):
-        ass_lines = smi2ass_internal (mln[lang])
+        ass_lines = smi2ass_internal(mln[lang])
         if len(ass_lines) > 0:
             asscontents = (script_info+styles+events+''.join(ass_lines)).encode('utf-8')
             ass_dict[longlang[lang_idx]] = asscontents
 
-    return ass_dict
+    return ass_dict, diagnostics
 
 def smi2ass_internal (sln):
     ass_lines = []
-    for line_idx, item in enumerate(sln):
-        try: # bad cases : '<SYNC .','<SYNC Start=479501??>'
-            li = sln[line_idx]['start']
-            li1 = sln[line_idx+1]['start']
-        except :
-            #print(ml[lang][line_idx])
-            li = None
-            li1 = None
-
-        if line_idx + 1 < len(sln) and not li == None and not li1 == None:
-            tcstart = ms2timecode(int(re.sub(r'\..*$', '', item['start'])))
-            tcend = ms2timecode(int(re.sub(r'\..*$', '', sln[line_idx+1]['start'])))
+    for line_idx, entry in enumerate(sln):
+        if line_idx + 1 < len(sln):
+            item = entry.tag
+            tcstart = ms2timecode(entry.timestamp)
+            tcend = ms2timecode(sln[line_idx+1].timestamp)
 
             p_tags = item.find('p')# <SYNC Start=41991><P Class=KRCC><SYNC Start=43792><P Class=KRCC>
             if not p_tags:
@@ -279,13 +461,13 @@ def smi2ass_internal (sln):
 
             br = p_tags.find_all('br')
             for gg in br:
-                gg.replaceWith('\\N')
+                gg.replace_with('\\N')
 
             bold = p_tags.find_all('b')
             for bo in bold:
                 if len(bo.text) != 0:
                     boldre = '{\\b1}'+bo.text+'{\\b0}'
-                    bo.replaceWith(boldre)
+                    bo.replace_with(NavigableString(boldre))
                 else:
                     bo.extract()
 
@@ -293,7 +475,7 @@ def smi2ass_internal (sln):
             for it in italics:
                 if len(it.text) != 0:
                     itre = '{\\i1}'+it.text+'{\\i0}'
-                    it.replaceWith(itre)
+                    it.replace_with(NavigableString(itre))
                 else:
                     it.extract()
 
@@ -301,7 +483,7 @@ def smi2ass_internal (sln):
             for un in underlines:
                 if len(un.text) != 0:
                     unre = '{\\u1}'+un.text+'{\\u0}'
-                    un.replaceWith(unre)
+                    un.replace_with(NavigableString(unre))
                 else:
                     un.extract()
 
@@ -309,7 +491,7 @@ def smi2ass_internal (sln):
             for st in strikes:
                 if len(st.text) != 0:
                     stre = '{\\s1}'+st.text+'{\\s0}'
-                    st.replaceWith(stre)
+                    st.replace_with(NavigableString(stre))
                 else:
                     st.extract()
 
@@ -317,7 +499,7 @@ def smi2ass_internal (sln):
             for rt in ruby_tags:
                 if len(rt.text) != 0:
                     rt_re = '{\\fscx50}{\\fscy50}&nbsp;'+rt.text+'&nbsp;{\\fscx100}{\\fscy100}'
-                    rt.replaceWith(rt_re)
+                    rt.replace_with(NavigableString(rt_re))
                 else:
                     rt.extract()
 
@@ -337,7 +519,7 @@ def smi2ass_internal (sln):
                         except: # bad cases : 'skybule'
                             converted_color = color.text
                             print('Failed to convert a color name: %s' % color['color'].lower())
-                    color.replaceWith(converted_color)
+                    color.replace_with(NavigableString(converted_color))
 
             contents = p_tags.text
             contents = re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', contents)
@@ -362,36 +544,33 @@ def ms2timecode(ms):
     return timecode
 
 
-def separate_by_lang(smi_lines):
+def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
     #prepare multilanguage dict with languages separated list
     multiLanguageDict = defaultdict(list)
 
     #loop for number of smi subtitle lines
     for line_idx, subtitleLine in enumerate(smi_lines):
-        #get time code from start tag
-        try:
-            timeCode = int(re.sub(r'\..*$', '', subtitleLine['start']))
-            if timeCode < 0:
-                print('Negative time code: %s' % subtitleLine)
-        except:
-            print('Failed to extract time code: %s' % subtitleLine)
+        source_line = sync_lines[line_idx] if line_idx < len(sync_lines) else 1
+        source_offset = sync_offsets[line_idx] if line_idx < len(sync_offsets) else 0
+        timestamp = _parse_timestamp(
+            subtitleLine.get('start'), source, source_offset or 0, diagnostics,
+        )
+        if timestamp is None:
+            continue
 
-        #get language name from p tag
-        try:
-            languageTag = subtitleLine.find('p')['class']
-        except:
-            print('Failed to extract language class: %s' % subtitleLine)
-
-        # seperate langs depending on p class (language tag)
-        # put smiLine,  Line Index, and time code into list (ml is dictionary (key is language name from p tag) with lists)
-        try:
-            multiLanguageDict[languageTag[0]].append([subtitleLine,line_idx,timeCode])
-        except: # bad cases : '<SYNC Start=7630><P>'
-            try: # if no p class name, add unknown as language tag and handle later
-                #languageTag = smi_lines[line_idx-1].find('p')['class']
-                multiLanguageDict['unknown'].append([subtitleLine,line_idx,timeCode])
-            except:
-                pass
+        language_classes = []
+        p_tag = subtitleLine.find('p')
+        if p_tag is not None:
+            language_classes = p_tag.get('class', [])
+        language = language_classes[0] if language_classes else 'unknown'
+        if not language_classes:
+            _add_diagnostic(
+                diagnostics, source, 'LANGUAGE_CLASS_MISSING', 'warning',
+                source_offset or 0,
+                'The cue has no language class; assigning it to the unknown language.',
+            )
+        entry = SyncEntry(subtitleLine, timestamp, source_line)
+        multiLanguageDict[language].append([entry, line_idx, timestamp])
 
     # check whether proper multiple language subtitle
     # if one language is less than 10% of the other language,
@@ -404,6 +583,8 @@ def separate_by_lang(smi_lines):
     for lang in langcodes:
         langcount.append([lang, len(multiLanguageDict[lang])])
     langcount = sorted(langcount, key=itemgetter(1))
+    if not langcount:
+        return defaultdict(list), []
 
     # calculate % of each language from largest, put it in langcount
     languageTagCheckFlag = 0
@@ -481,7 +662,7 @@ def convert_file(smi_path):
 
     with open(smi_path, 'r', encoding=smi_encoding, errors='replace') as smi_file:
         smi_sgml = smi_file.read()
-    ass_dict = smi2ass(smi_sgml)
+    ass_dict, diagnostics = convert_smi(smi_sgml)
     for lang in ass_dict:
         if len(lang) == 0:
             ass_path = smi_path[:smi_path.rfind('.')] + '.' + default_lang_code + '.ass'
@@ -491,6 +672,21 @@ def convert_file(smi_path):
         with open(ass_path, 'wb') as ass_file:
             ass_file.write(ass_dict[lang])
 
+    for diagnostic in diagnostics:
+        print(
+            '%s:%d: [%s] %s' % (
+                smi_path, diagnostic.line, diagnostic.severity, diagnostic.message,
+            ),
+            file=sys.stderr,
+        )
+    repaired_count = sum(item.severity == 'repair' for item in diagnostics)
+    skipped_count = sum(item.severity == 'skip' for item in diagnostics)
+    print(
+        '%s: repaired %d, skipped %d' % (smi_path, repaired_count, skipped_count),
+        file=sys.stderr,
+    )
+    return skipped_count > 0
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -499,9 +695,14 @@ def main(argv=None):
     parser.add_argument('files', nargs='+', metavar='FILE.smi')
     args = parser.parse_args(argv)
 
+    failed = False
     for smi_path in args.files:
-        convert_file(smi_path)
-    return 0
+        try:
+            failed = convert_file(smi_path) or failed
+        except OSError as error:
+            print('%s: error: %s' % (smi_path, error), file=sys.stderr)
+            failed = True
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':
