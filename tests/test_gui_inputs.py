@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from smi2ass_gui_support import collect_smi_files
+from smi2ass_gui_support import collect_smi_files, scan_smi_files
 
 
 def test_collect_smi_files_finds_only_smi_extensions_recursively(tmp_path):
@@ -30,3 +30,22 @@ def test_collect_smi_files_deduplicates_files_and_folders(tmp_path):
     result = collect_smi_files([source, root, source])
 
     assert result == [source.resolve()]
+
+
+def test_scan_smi_files_reports_directory_walk_errors(tmp_path, monkeypatch):
+    root = tmp_path / 'input'
+    root.mkdir()
+    source = root / 'visible.smi'
+    source.write_text('fixture', encoding='utf-8')
+    denied = PermissionError('permission denied')
+
+    def fake_walk(path, onerror):
+        onerror(denied)
+        yield str(path), [], [source.name]
+
+    monkeypatch.setattr('smi2ass_gui_support.os.walk', fake_walk)
+
+    result = scan_smi_files([root])
+
+    assert result.files == (source.resolve(),)
+    assert result.errors == ((root, denied),)

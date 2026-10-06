@@ -694,24 +694,22 @@ def convert_smi_file(smi_path, overwrite=True):
         )
         output_data[ass_path] = contents
 
-    existing_outputs = tuple(path for path in output_data if path.exists())
-    if existing_outputs and not overwrite:
-        return FileConversionResult(
-            source=input_path,
-            outputs=(),
-            diagnostics=tuple(diagnostics),
-            skipped_existing=existing_outputs,
-        )
-
-    for ass_path, contents in output_data.items():
+    existing_outputs = tuple(
+        path for path in output_data if not overwrite and path.exists()
+    )
+    written_outputs = tuple(
+        path for path in output_data if overwrite or not path.exists()
+    )
+    for ass_path in written_outputs:
+        contents = output_data[ass_path]
         with ass_path.open('wb') as ass_file:
             ass_file.write(contents)
 
     return FileConversionResult(
         source=input_path,
-        outputs=tuple(output_data),
+        outputs=written_outputs,
         diagnostics=tuple(diagnostics),
-        skipped_existing=(),
+        skipped_existing=existing_outputs,
     )
 
 

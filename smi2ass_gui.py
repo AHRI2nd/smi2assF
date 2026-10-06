@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from smi2ass import convert_smi_file
-from smi2ass_gui_support import collect_smi_files
+from smi2ass_gui_support import scan_smi_files
 
 
 class Smi2AssApp:
@@ -101,7 +101,12 @@ class Smi2AssApp:
         self.log.pack(fill='x')
 
     def add_paths(self, paths):
-        found = collect_smi_files(paths)
+        if self.busy:
+            self.status_label.configure(text='현재 변환이 끝난 뒤 파일을 추가해 주세요.')
+            return 0
+
+        scan_result = scan_smi_files(paths)
+        found = scan_result.files
         added = 0
         for path in found:
             if path in self.row_ids:
@@ -118,10 +123,16 @@ class Smi2AssApp:
         if added:
             self.status_label.configure(text='%d개 파일을 목록에 추가했습니다.' % added)
             self.convert_button.configure(state='normal')
-        elif not found:
+        elif not found and not scan_result.errors:
             self.status_label.configure(text='.smi 또는 .SMI 파일을 찾지 못했습니다.')
-        elif self.files:
+        elif not added and self.files and not scan_result.errors:
             self.status_label.configure(text='이미 목록에 있는 파일입니다.')
+        for path, error in scan_result.errors:
+            self._append_log('%s: 폴더 검색 오류: %s' % (path, error))
+        if scan_result.errors:
+            self.status_label.configure(
+                text='%d개 파일 추가, %d개 위치 검색 실패' % (added, len(scan_result.errors))
+            )
         return added
 
     def _on_drop(self, event):
@@ -262,9 +273,13 @@ class Smi2AssApp:
             text='변환 중입니다. %d / %d' % (self._completed, self._total)
         )
         if result.skipped_existing:
-            self._skipped_existing += 1
-            self.file_list.set(self.row_ids[path], 'status', '기존 ASS로 건너뜀')
-            self._append_log('%s: 기존 결과가 있어 건너뛰었습니다.' % path)
+            self._skipped_existing += len(result.skipped_existing)
+            if result.outputs:
+                self.file_list.set(self.row_ids[path], 'status', '완료 (일부 유지)')
+            else:
+                self.file_list.set(self.row_ids[path], 'status', '기존 ASS로 건너뜀')
+            for output in result.skipped_existing:
+                self._append_log('%s: 기존 결과를 유지했습니다.' % output)
         elif any(item.severity == 'skip' for item in result.diagnostics):
             self.file_list.set(self.row_ids[path], 'status', '일부 자막 건너뜀')
         else:
