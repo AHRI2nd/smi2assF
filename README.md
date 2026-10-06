@@ -1,83 +1,144 @@
 # smi2ass
 
-`smi2ass` converts SAMI subtitle files to SSA/ASS. The desktop app accepts
-`.smi` and `.SMI` files on macOS and Windows.
+**smi2ass** converts SAMI subtitle files (`.smi`) to SubStation Alpha (`.ass`).
+This fork provides a drag-and-drop desktop app for macOS and Windows, as well
+as a command-line interface.
+
+## Features
+
+- Add subtitle files or folders by dragging them into the app or using the file
+  and folder pickers.
+- When adding a folder, search its subfolders recursively. The desktop app
+  accepts files whose extension is exactly `.smi` or `.SMI`.
+- Write each `.ass` beside its source `.smi`; source files are left in place.
+- Convert SAMI files containing multiple languages into separate language
+  outputs, such as `episode.eng.ass` and `episode.kor.ass`.
+- In the desktop app, preserve existing `.ass` files by default. Missing
+  language outputs are still created when only some outputs already exist.
+  Enable **기존 ASS 파일 덮어쓰기** to replace existing outputs.
+- Repair recognized SAMI markup and timestamp damage, and show repairs, skipped
+  cues, existing outputs, and file errors in the app or CLI.
+
+## Download
+
+Download a build from the repository's
+[GitHub Actions](https://github.com/AHRI2nd/smi2assF/actions) page. Open a
+successful **Desktop builds** run and download the artifact for your platform:
+
+| Artifact | Build |
+| --- | --- |
+| `smi2ass-macos-arm64` | Apple Silicon Mac app archive (`.app.zip`) |
+| `smi2ass-macos-x86_64` | Intel Mac app archive (`.app.zip`) |
+| `smi2ass-windows-x86_64` | Windows application (`.exe`) |
+
+The workflow runs on pushes to `master`, pull requests, manual dispatches, and
+`v*` tags. A successful tag build also creates a GitHub release containing all
+platform packages and SHA-256 checksum files. Releases, when available, are
+listed on the [Releases page](https://github.com/AHRI2nd/smi2assF/releases).
+
+Extract the macOS archive before opening the app. Builds are not signed or
+notarized; macOS Gatekeeper may require you to Control-click the app and choose
+**Open** on first launch. Windows may show a SmartScreen warning for the
+unsigned executable.
 
 ## Use the desktop app
 
-Open the macOS `.app` or Windows `.exe`, then drag one or more subtitle files
-or folders into the drop area. You can also choose files or folders with the
-buttons in the app. Folders are searched recursively; only files ending in
-`.smi` or `.SMI` are added.
+1. Open `smi2ass.app` on macOS or `smi2ass.exe` on Windows.
+2. Drag `.smi` or `.SMI` files or folders into the drop area, or use **파일
+   선택** / **폴더 선택**.
+3. Review the discovered files and choose whether to overwrite existing ASS
+   outputs.
+4. Select **변환 시작**. Results are written beside each source file.
 
-Each `.ass` file is written beside its source subtitle. Existing output files
-are skipped by default. Select **Overwrite existing ASS files** before
-converting if you want to replace them. Repairs, skipped cues, and file errors
-appear in the conversion list and history area.
-
-The app does not change or move the original subtitle files. Multilanguage
-inputs produce one ASS file per detected language, for example
-`episode.eng.ass` and `episode.kor.ass`.
-
-## Download builds
-
-GitHub Actions builds the app on Windows and macOS for Apple Silicon and Intel
-Macs. Open the repository's **Actions** page, select a successful **Desktop
-builds** run, and download the artifact for your platform:
-
-- `smi2ass-macos-arm64`: macOS Apple Silicon `.app` archive.
-- `smi2ass-macos-x86_64`: macOS Intel `.app` archive.
-- `smi2ass-windows-x86_64`: Windows `.exe`.
-
-Extract the macOS archive before opening the `.app`. Builds are not signed or
-notarized by default, so macOS may require Control-clicking the app and
-choosing **Open** the first time. Windows may show a SmartScreen warning for
-the unsigned `.exe`.
-
-The workflow builds on pushes to `master`, pull requests, manual dispatches,
-and `v*` tags. Tag builds are attached to a GitHub release.
+Folders are searched recursively. Other extensions, including mixed-case
+variants such as `.Smi`, are not added by the desktop app. When a source
+contains multiple languages, the app checks each language output separately:
+existing files are preserved by default while missing language outputs are
+created.
 
 ## Command-line use
 
-The original CLI remains available for explicit input paths:
+Python 3.14 is required. Install the runtime dependencies, then pass one or
+more input paths to the converter:
 
 ```sh
 python3.14 -m pip install -r requirements.txt
-python3.14 smi2ass.py movie.smi
-python3.14 smi2ass.py movie-one.smi movie-two.smi
+python3.14 smi2ass.py episode.smi
+python3.14 smi2ass.py episode-one.smi episode-two.smi
 ```
 
-The CLI writes each ASS file beside its input. A single-language input uses
-`.kor.ass` by default. Multilanguage output uses the detected language codes.
+The CLI writes outputs beside the input files. Single-language output uses
+`.kor.ass` by default; multilanguage input produces one file per detected
+language. The CLI overwrites existing outputs. It accepts the paths you
+provide directly; extension filtering and recursive folder discovery are
+desktop-app features.
 
 ## Recovery and diagnostics
 
-The converter automatically repairs unambiguous SAMI damage, including a
-missing `</SYNC>` before the next `SYNC` cue, unmatched closing `SYNC` tags,
-unclosed supported formatting tags, and recognized punctuation after an
-integer timestamp such as `Start=479501??`.
+The converter repairs recognized, unambiguous damage, including:
 
-When a timestamp is missing, negative, or too ambiguous to recover, that cue
-is skipped while other cues and input files continue. Unsupported font colors
-are left unapplied and reported; subtitle text is preserved. Supported tags
-include `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`, `<font>`, and `<rt>` (Ruby
-tags).
+- A missing `</SYNC>` before the next `SYNC` cue.
+- A closing `SYNC` tag without a matching open tag.
+- Unclosed supported formatting tags within a cue.
+- Recognized punctuation after an integer timestamp, for example
+  `Start=479501??`.
+
+Cues with missing, negative, or ambiguous timestamps are skipped while other
+cues and input files continue. Unsupported font colors are reported and left
+unapplied. The app shows repair, skip, and file-error details in its history;
+the CLI prints diagnostics and returns a nonzero status if a cue was skipped or
+a file could not be processed.
+
+Supported subtitle markup includes `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`,
+`<font>`, and `<rt>` (Ruby tags).
 
 ## Development
 
-Use Python 3.14 with Tk support to run the desktop app from source:
+Use Python 3.14. A Python build with Tk support is needed to run the desktop
+interface. Install development dependencies, run the tests, and launch the GUI:
 
 ```sh
 python3.14 -m pip install -r requirements-dev.txt
+python3.14 -m pytest -q
 python3.14 smi2ass_gui.py
 ```
 
-Run the test suite with `python3.14 -m pytest`. GitHub Actions also runs the
-tests and packages the platform app. The package build is performed by the
-workflow so each app is created on its target operating system.
+To package the app locally, use a Python 3.14 installation with Tk support on
+the target operating system:
 
-## License and credits
+```sh
+PYTHON=python3.14 bash install.sh
+bash build.sh
+```
 
-This project is distributed under the GNU General Public License, version 2
-or (at your option) any later version. The original conversion logic was
-forked from the [GomTV subtitle add-on](https://github.com/hojel/service.subtitles.gomtv).
+The build scripts create packages for the operating system on which they run.
+GitHub Actions builds macOS Apple Silicon, macOS Intel, and Windows x86-64
+packages on their respective runners, runs the test suite, smoke-tests each
+app, and publishes artifacts with checksums.
+
+## Project lineage and credits
+
+This repository continues work from two earlier projects:
+
+1. The original SAMI conversion implementation was derived from the
+   [`service.subtitles.gomtv` Kodi add-on](https://github.com/hojel/service.subtitles.gomtv/tree/3a7342961e140eaf8250659b0ac6158ce5e6bc5c/resources/lib).
+   The converter's source header identifies this upstream snapshot and commit.
+2. [Trustin Lee's `smi2ass`](https://github.com/trustin/smi2ass) adapted that
+   converter into a standalone project. Its README credits Trustin Lee with
+   Ruby tag support, improved whitespace preservation, executable packaging,
+   the Python 2 to Python 3 and BeautifulSoup 3 to BeautifulSoup 4 updates, and
+   cleanup. The converter source retains its 2018 copyright notice for Trustin
+   Heuiseung Lee and other contributors.
+
+Additional contributions recorded in this repository include:
+
+- [goodGhost](https://github.com/good-ghost): Python 3.7 compatibility and a
+  BeautifulSoup compatibility fix.
+- Tsukimori Ahri, current fork maintainer: Python 3.14 modernization, SAMI
+  recovery and diagnostics, the desktop interface, recursive folder handling,
+  and macOS/Windows GitHub Actions packaging.
+
+The source code is licensed under the GNU General Public License, version 2 or
+any later version, as stated in the source notices. See [LICENSE.txt](LICENSE.txt)
+for the license text. Please retain the existing copyright and license notices
+when redistributing the source.

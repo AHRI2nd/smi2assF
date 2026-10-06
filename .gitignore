@@ -1,6 +1,7 @@
 # Build output
 /build
 /test_smis/*.ass
+.DS_Store
 __pycache__
 .pytest_cache
 /Transfer.md
