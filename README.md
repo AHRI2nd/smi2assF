@@ -31,12 +31,13 @@ Mac builds are not provided.
 
 | Artifact | Build |
 | --- | --- |
-| `smi2ass-release-macos-arm64` | macOS disk image (`.dmg`) and SHA-256 checksum |
-| `smi2ass-release-windows-x86_64` | Windows application (`.exe`) and SHA-256 checksum |
+| `smi2ass.osx-arm64.dmg` | macOS disk image containing `smi2ass.app` |
+| `smi2ass.windows-x86_64.exe` | Windows application |
+| `*.sha256` | SHA-256 checksums for the release files |
 
-Actions artifacts are wrapped once in GitHub's artifact container; extract the
-artifact once to get the `.dmg` or `.exe`. No additional archive is nested
-inside it. The draft release contains the `.dmg` and `.exe` as direct downloads.
+Actions artifacts are uploaded as individual files without ZIP packaging.
+Download the `.dmg` or `.exe` directly. The draft release also contains these
+files and their checksums as direct downloads.
 Review the draft and publish it from the
 [Releases page](https://github.com/AHRI2nd/smi2assF/releases) when it is ready.
 
