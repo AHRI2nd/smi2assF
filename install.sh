@@ -30,5 +30,6 @@ fi
 
 "$VENV_PYTHON" -m pip install --upgrade pip
 "$VENV_PYTHON" -m pip install -r requirements-dev.txt
+"$VENV_PYTHON" scripts/prepare_tkdnd.py
 
 echo "Prepared Python 3.14 build environment at build/venv-py314"
