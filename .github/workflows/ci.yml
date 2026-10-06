@@ -1,7 +1,9 @@
-name: CI
+name: Desktop builds
 
 on:
   push:
+    branches:
+      - master
     tags:
       - 'v*'
   pull_request:
@@ -12,15 +14,18 @@ permissions:
 
 jobs:
   build:
-    name: Python 3.14 on ${{ matrix.os }}
+    name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        include:
+          - os: macos-latest
+            platform: macos-arm64
+          - os: macos-15-intel
+            platform: macos-x86_64
+          - os: windows-latest
+            platform: windows-x86_64
     env:
       PYTHON: python
     steps:
@@ -38,19 +43,19 @@ jobs:
         shell: bash
         run: bash install.sh
 
-      - name: Run tests and build executable
+      - name: Verify GUI runtime and build package
         shell: bash
         run: bash build.sh
 
-      - name: Upload executable and checksum
+      - name: Upload desktop app and checksum
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: smi2ass-${{ matrix.os }}
-          path: build/dist/smi2ass.*
+          name: smi2ass-${{ matrix.platform }}
+          path: build/gui-dist/smi2ass.*
           if-no-files-found: error
 
   release:
-    name: Publish release assets
+    name: Publish tagged desktop builds
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest

@@ -287,8 +287,16 @@ class Smi2AssApp:
 
 
 def main(argv=None):
-    app = Smi2AssApp()
     initial_paths = sys.argv[1:] if argv is None else argv
+    if initial_paths == ['--smoke-test']:
+        app = Smi2AssApp()
+        try:
+            app.root.update_idletasks()
+        finally:
+            app.root.destroy()
+        return 0
+
+    app = Smi2AssApp()
     if initial_paths:
         app.add_paths(initial_paths)
     app.root.mainloop()
