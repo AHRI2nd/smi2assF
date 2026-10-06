@@ -230,6 +230,14 @@ class ConversionDiagnostic:
 
 
 @dataclass(frozen=True)
+class FileConversionResult:
+    source: Path
+    outputs: tuple
+    diagnostics: tuple
+    skipped_existing: tuple
+
+
+@dataclass(frozen=True)
 class SyncEntry:
     tag: object
     timestamp: int
@@ -667,7 +675,7 @@ def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
     return multiLanguageDictSorted, longlang
 
 
-def convert_file(smi_path):
+def convert_smi_file(smi_path, overwrite=True):
     # Open as binary and detect the encoding.
     with open(smi_path, 'rb') as smi_file:
         smi_bytes = smi_file.read()
@@ -678,24 +686,46 @@ def convert_file(smi_path):
     ass_dict, diagnostics = convert_smi(smi_sgml)
     input_path = Path(smi_path)
     output_stem = input_path.stem if input_path.suffix else input_path.name
-    for lang in ass_dict:
+    output_data = {}
+    for lang, contents in ass_dict.items():
         output_language = lang or default_lang_code
         ass_path = input_path.with_name(
             '%s.%s.ass' % (output_stem, output_language),
         )
+        output_data[ass_path] = contents
 
+    existing_outputs = tuple(path for path in output_data if path.exists())
+    if existing_outputs and not overwrite:
+        return FileConversionResult(
+            source=input_path,
+            outputs=(),
+            diagnostics=tuple(diagnostics),
+            skipped_existing=existing_outputs,
+        )
+
+    for ass_path, contents in output_data.items():
         with ass_path.open('wb') as ass_file:
-            ass_file.write(ass_dict[lang])
+            ass_file.write(contents)
 
-    for diagnostic in diagnostics:
+    return FileConversionResult(
+        source=input_path,
+        outputs=tuple(output_data),
+        diagnostics=tuple(diagnostics),
+        skipped_existing=(),
+    )
+
+
+def convert_file(smi_path):
+    result = convert_smi_file(smi_path)
+    for diagnostic in result.diagnostics:
         print(
             '%s:%d: [%s] %s' % (
                 smi_path, diagnostic.line, diagnostic.severity, diagnostic.message,
             ),
             file=sys.stderr,
         )
-    repaired_count = sum(item.severity == 'repair' for item in diagnostics)
-    skipped_count = sum(item.severity == 'skip' for item in diagnostics)
+    repaired_count = sum(item.severity == 'repair' for item in result.diagnostics)
+    skipped_count = sum(item.severity == 'skip' for item in result.diagnostics)
     print(
         '%s: repaired %d, skipped %d' % (smi_path, repaired_count, skipped_count),
         file=sys.stderr,
