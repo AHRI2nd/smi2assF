@@ -80,6 +80,15 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Verify downloaded release files
+        shell: bash
+        run: |
+          cd release-assets
+          test -s smi2ass.osx-arm64.dmg
+          test -s smi2ass.windows-x86_64.exe
+          sha256sum --check smi2ass.osx-arm64.dmg.sha256
+          sha256sum --check smi2ass.windows-x86_64.exe.sha256
+
       - name: Create GitHub release draft
         env:
           GH_TOKEN: ${{ github.token }}

@@ -11,16 +11,22 @@ def _bash_executable():
     if os.name == 'nt':
         git = shutil.which('git')
         assert git, 'Git for Windows is required to test the build scripts.'
-        bash = Path(git).resolve().parent.parent / 'bin' / 'bash.exe'
-        assert bash.is_file(), f'Git Bash was not found at {bash}'
-        return str(bash)
+        for directory in Path(git).resolve().parents:
+            for relative_path in ('bin/bash.exe', 'usr/bin/bash.exe'):
+                bash = directory / relative_path
+                if bash.is_file():
+                    return str(bash)
+        raise AssertionError(f'Git Bash was not found alongside {git}')
     bash = shutil.which('bash')
     assert bash, 'Bash is required to test the build scripts.'
     return bash
 
 
-def test_windows_shell_selection_uses_git_bash_instead_of_wsl(tmp_path, monkeypatch):
-    git = tmp_path / 'Git' / 'cmd' / 'git.exe'
+@pytest.mark.parametrize('git_directory', ['cmd', 'bin', 'mingw64/bin', 'usr/bin'])
+def test_windows_shell_selection_uses_git_bash_instead_of_wsl(
+    tmp_path, monkeypatch, git_directory
+):
+    git = tmp_path / 'Git' / git_directory / 'git.exe'
     git_bash = tmp_path / 'Git' / 'bin' / 'bash.exe'
     wsl_bash = tmp_path / 'Windows' / 'System32' / 'bash.exe'
     for executable in (git, git_bash, wsl_bash):
