@@ -1,76 +1,80 @@
 # smi2ass
 
-`smi2ass` converts SAMI subtitle files (`.smi`) to SSA/ASS subtitle files
-(`.ass`). Python 3.14 is required.
+`smi2ass` converts SAMI subtitle files to SSA/ASS. The desktop app accepts
+`.smi` and `.SMI` files on macOS and Windows.
 
-## Install and run
+## Use the desktop app
 
-Install the current runtime dependencies with Python 3.14:
+Open the macOS `.app` or Windows `.exe`, then drag one or more subtitle files
+or folders into the drop area. You can also choose files or folders with the
+buttons in the app. Folders are searched recursively; only files ending in
+`.smi` or `.SMI` are added.
+
+Each `.ass` file is written beside its source subtitle. Existing output files
+are skipped by default. Select **Overwrite existing ASS files** before
+converting if you want to replace them. Repairs, skipped cues, and file errors
+appear in the conversion list and history area.
+
+The app does not change or move the original subtitle files. Multilanguage
+inputs produce one ASS file per detected language, for example
+`episode.eng.ass` and `episode.kor.ass`.
+
+## Download builds
+
+GitHub Actions builds the app on Windows and macOS for Apple Silicon and Intel
+Macs. Open the repository's **Actions** page, select a successful **Desktop
+builds** run, and download the artifact for your platform:
+
+- `smi2ass-macos-arm64`: macOS Apple Silicon `.app` archive.
+- `smi2ass-macos-x86_64`: macOS Intel `.app` archive.
+- `smi2ass-windows-x86_64`: Windows `.exe`.
+
+Extract the macOS archive before opening the `.app`. Builds are not signed or
+notarized by default, so macOS may require Control-clicking the app and
+choosing **Open** the first time. Windows may show a SmartScreen warning for
+the unsigned `.exe`.
+
+The workflow builds on pushes to `master`, pull requests, manual dispatches,
+and `v*` tags. Tag builds are attached to a GitHub release.
+
+## Command-line use
+
+The original CLI remains available for explicit input paths:
 
 ```sh
 python3.14 -m pip install -r requirements.txt
 python3.14 smi2ass.py movie.smi
-```
-
-Pass one or more input files to convert them in one run:
-
-```sh
 python3.14 smi2ass.py movie-one.smi movie-two.smi
 ```
 
-The converter writes an ASS file beside each input. A single-language input
-uses the `.kor.ass` suffix by default. When a file contains multiple languages,
-the output suffix uses the detected language code, such as `.eng.ass` and
-`.kor.ass`.
+The CLI writes each ASS file beside its input. A single-language input uses
+`.kor.ass` by default. Multilanguage output uses the detected language codes.
 
 ## Recovery and diagnostics
 
 The converter automatically repairs unambiguous SAMI damage, including a
 missing `</SYNC>` before the next `SYNC` cue, unmatched closing `SYNC` tags,
 unclosed supported formatting tags, and recognized punctuation after an
-integer timestamp such as `Start=479501??`. Each repair is printed to stderr
-with the input path and source line when available.
+integer timestamp such as `Start=479501??`.
 
 When a timestamp is missing, negative, or too ambiguous to recover, that cue
-is skipped and reported. Other cues and input files continue to be converted.
-The CLI prints a per-file count of repairs and skipped cues. It exits with:
+is skipped while other cues and input files continue. Unsupported font colors
+are left unapplied and reported; subtitle text is preserved. Supported tags
+include `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`, `<font>`, and `<rt>` (Ruby
+tags).
 
-- `0` when every cue is converted or repaired.
-- `1` when an input file cannot be read or any cue must be skipped.
-- `2` when command-line arguments are invalid, such as when no input file is
-  provided.
+## Development
 
-Unsupported font colors are left unapplied and reported; subtitle text is
-preserved. Supported tags include `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`,
-`<font>`, and `<rt>` (Ruby tags).
-
-## Build and test
-
-Use Python 3.14 to prepare the isolated build environment, run the test suite,
-and create a one-file executable:
-
-```sh
-./install.sh
-./build.sh
-```
-
-On Windows, run the scripts in Bash and set `PYTHON=python` if the interpreter
-is not available as `python3.14`. The executable and SHA-256 file are written
-to `build/dist/`. The build includes an end-to-end smoke test using a small
-synthetic subtitle. The build environment is isolated at
-`build/venv-py314/`.
-
-Run the automated tests without building the executable:
+Use Python 3.14 with Tk support to run the desktop app from source:
 
 ```sh
 python3.14 -m pip install -r requirements-dev.txt
-python3.14 -m pytest
+python3.14 smi2ass_gui.py
 ```
 
-GitHub Actions runs the test and executable build on Linux, macOS, and Windows
-with Python 3.14. Each run uploads the executable and checksum as workflow
-artifacts. Pushing a `v*` tag creates a GitHub release with the three platform
-builds and their checksums.
+Run the test suite with `python3.14 -m pytest`. GitHub Actions also runs the
+tests and packages the platform app. The package build is performed by the
+workflow so each app is created on its target operating system.
 
 ## License and credits
 
