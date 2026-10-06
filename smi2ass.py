@@ -19,20 +19,15 @@
 #
 # Forked from: https://github.com/hojel/service.subtitles.gomtv/blob/3a7342961e140eaf8250659b0ac6158ce5e6bc5c/resources/lib
 
-import chardet, os, sys, re
+import argparse
+import chardet
+import html
+import os
+import re
+import sys
 from collections import defaultdict
 from operator import itemgetter
 from bs4 import BeautifulSoup
-
-major = sys.version_info.major
-minor = sys.version_info.minor
-
-if major == 3 and minor == 7:
-    import html
-elif major == 3 and minor < 7:
-    from html.parser import HTMLParser
-else:
-    print ('version 3.x needed') 
 
 default_lang_code = 'kor'
 default_font_name = 'sans-serif'
@@ -264,7 +259,6 @@ def smi2ass(smi_sgml):
     return ass_dict
 
 def smi2ass_internal (sln):
-    global minor
     ass_lines = []
     for line_idx, item in enumerate(sln):
         try: # bad cases : '<SYNC .','<SYNC Start=479501??>'
@@ -347,11 +341,7 @@ def smi2ass_internal (sln):
 
             contents = p_tags.text
             contents = re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', contents)
-            if minor == 7:
-                contents = html.unescape(contents)
-            else:
-                parser = HTMLParser()
-                contents = parser.unescape(contents)
+            contents = html.unescape(contents)
 
             if len(contents.strip()) != 0:
                 line = 'Dialogue: 0,%s,%s,Default,,0000,0000,0000,,%s\n' % (tcstart,tcend, contents)
@@ -483,15 +473,14 @@ def separate_by_lang(smi_lines):
     return multiLanguageDictSorted, longlang
 
 
-for smi_path in sys.argv[1:]:
+def convert_file(smi_path):
     # Open as binary and detect the encoding.
-    smi_file = open(smi_path, 'rb')
-    smi_encoding = chardet.detect(smi_file.read())['encoding']
-    smi_file.close()
+    with open(smi_path, 'rb') as smi_file:
+        smi_bytes = smi_file.read()
+    smi_encoding = chardet.detect(smi_bytes)['encoding'] or 'utf-8'
 
-    smi_file = open(smi_path, 'r', encoding = smi_encoding, errors = 'replace')
-    smi_sgml = smi_file.read()
-    smi_file.close()
+    with open(smi_path, 'r', encoding=smi_encoding, errors='replace') as smi_file:
+        smi_sgml = smi_file.read()
     ass_dict = smi2ass(smi_sgml)
     for lang in ass_dict:
         if len(lang) == 0:
@@ -499,6 +488,21 @@ for smi_path in sys.argv[1:]:
         else:
             ass_path = smi_path[:smi_path.rfind('.')] + '.' + lang + '.ass'
 
-        ass_file = open(ass_path, "wb")
-        ass_file.write(ass_dict[lang])
-        ass_file.close()
+        with open(ass_path, 'wb') as ass_file:
+            ass_file.write(ass_dict[lang])
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description='Convert SAMI subtitle files to SSA/ASS.'
+    )
+    parser.add_argument('files', nargs='+', metavar='FILE.smi')
+    args = parser.parse_args(argv)
+
+    for smi_path in args.files:
+        convert_file(smi_path)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
