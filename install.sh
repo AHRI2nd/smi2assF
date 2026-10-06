@@ -1,55 +1,34 @@
-#!/bin/bash -e
-cd "$(dirname "$0")"
-rm -fr build
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Install or find Python 3.6.
-if [[ "$(uname)" =~ ([Ll]inux) ]]; then
-  if [[ "$TRAVIS_OS_NAME" == 'linux' ]]; then
-    sudo add-apt-repository -y ppa:deadsnakes/ppa
-    sudo apt-get update
-    sudo apt-get install -y python3.6 python3.6-venv python3.6-dev
-  fi
-  PYTHON=/usr/bin/python3.6
-elif [[ "$(uname)" =~ ([Dd]arwin) ]]; then
-  if brew ls --versions python > /dev/null; then
-    brew upgrade python3
-  else
-    brew install python3
-  fi
-  PYTHON=/usr/local/bin/python3
-elif [[ -n "$APPVEYOR" ]]; then
-  if [[ "$(./os_classifier.sh)" == 'windows-x86_32' ]]; then
-    PYTHON=/c/Python36/python
-  else
-    PYTHON=/c/Python36-x64/python
-  fi
+if [[ -n "${PYTHON:-}" ]]; then
+  PYTHON_BIN="$PYTHON"
+elif command -v python3.14 >/dev/null 2>&1; then
+  PYTHON_BIN=python3.14
 else
-  echo "Unsupported build environment: $(uname -a)"
+  PYTHON_BIN=python3
+fi
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "Python 3.14 was not found: $PYTHON_BIN" >&2
   exit 1
 fi
 
-# Create and activate a Python 3.6 virtualenv.
-echo "Creating a new virtualenv with $PYTHON"
-"$PYTHON" -m venv build/venv
-export PATH="$PWD/build/venv/bin:$PWD/build/venv/Scripts:$PATH"
-
-# Upgrade pip and setuptools.
-if [[ -n "$APPVEYOR" ]]; then
-  # Windows
-  python -m pip install --upgrade pip setuptools
-else
-  pip install --upgrade pip setuptools
-fi
-
-# Make sure we use Python 3.6.
-PYVER="$(python --version)"
-PIPVER="$(pip --version)"
-echo "$(which python) --version: $PYVER"
-echo "$(which pip) --version: $PIPVER"
-echo "os.classifier: $(./os_classifier.sh)"
-if [[ ! "$PYVER" =~ (^Python 3\.6\.) ]] || \
-   [[ ! "$(which python)" =~ (^.*/build/venv/.*$) ]] || \
-   [[ ! "$PIPVER" =~ (^.*pip 10\..*[\\/]build[\\/]venv[\\/].*3\.6[^0-9].*$) ]]; then
-  echo 'Must run on Python 3.6 virtualenv with pip 10'
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info[:2] != (3, 14))'; then
+  echo "Python 3.14 is required to build smi2ass." >&2
   exit 1
 fi
+
+mkdir -p build
+"$PYTHON_BIN" -m venv build/venv-py314
+
+if [[ -x build/venv-py314/bin/python ]]; then
+  VENV_PYTHON=build/venv-py314/bin/python
+else
+  VENV_PYTHON=build/venv-py314/Scripts/python.exe
+fi
+
+"$VENV_PYTHON" -m pip install --upgrade pip
+"$VENV_PYTHON" -m pip install -r requirements-dev.txt
+
+echo "Prepared Python 3.14 build environment at build/venv-py314"

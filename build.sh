@@ -1,43 +1,50 @@
-#!/bin/bash -e
-export PATH="$PWD/build/venv/bin:$PWD/build/venv/Scripts:$PATH"
-if [[ ! -d "$PWD/build/venv" ]]; then
-  echo "virtualenv not ready"
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -x build/venv-py314/bin/python ]]; then
+  VENV_PYTHON=build/venv-py314/bin/python
+elif [[ -x build/venv-py314/Scripts/python.exe ]]; then
+  VENV_PYTHON=build/venv-py314/Scripts/python.exe
+else
+  echo "Build environment not found. Run install.sh first." >&2
   exit 1
 fi
 
-# Install the core packages.
-pip install \
-  'PyInstaller==3.3.1' \
-  'beautifulsoup4==4.6.0' \
-  'chardet==3.0.4'
+"$VENV_PYTHON" -c 'import sys; raise SystemExit(sys.version_info[:2] != (3, 14))'
+"$VENV_PYTHON" -m pytest -q
 
-# Build the binary.
-python -OO -m PyInstaller \
+export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-$PWD/build/pyinstaller-config}"
+mkdir -p "$PYINSTALLER_CONFIG_DIR"
+
+"$VENV_PYTHON" -m PyInstaller \
   --noconfirm \
   --console \
   --onefile \
+  --name smi2ass \
   --distpath build/dist \
+  --workpath build/work \
   --specpath build \
   smi2ass.py
 
-# Rename the binary.
 OS_CLASSIFIER="$(./os_classifier.sh)"
 if [[ -f build/dist/smi2ass.exe ]]; then
   SMI2ASS_BIN="build/dist/smi2ass.$OS_CLASSIFIER.exe"
-  mv -v build/dist/smi2ass.exe "$SMI2ASS_BIN"
+  mv -f build/dist/smi2ass.exe "$SMI2ASS_BIN"
 else
   SMI2ASS_BIN="build/dist/smi2ass.$OS_CLASSIFIER"
-  mv -v build/dist/smi2ass "$SMI2ASS_BIN"
+  mv -f build/dist/smi2ass "$SMI2ASS_BIN"
 fi
 
-# Generate the SHA256 checksum.
-if [[ -x /usr/local/bin/gsha256sum ]]; then
-  SHA256SUM_BIN=/usr/local/bin/gsha256sum
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256="$(sha256sum "$SMI2ASS_BIN" | awk '{print $1}')"
 else
-  SHA256SUM_BIN=sha256sum
+  SHA256="$(shasum -a 256 "$SMI2ASS_BIN" | awk '{print $1}')"
 fi
-"$SHA256SUM_BIN" -b "$SMI2ASS_BIN" | sed 's/ .*//g' > "$SMI2ASS_BIN.sha256"
-echo "sha256sum: $(cat "$SMI2ASS_BIN.sha256") ($SMI2ASS_BIN.sha256)"
+printf '%s\n' "$SHA256" > "$SMI2ASS_BIN.sha256"
+echo "SHA256: $SHA256 ($SMI2ASS_BIN.sha256)"
 
-# Build a test site with the binary to make sure it really works.
-"build/dist/smi2ass.$OS_CLASSIFIER" 'test_smis/Psycho-Pass - S01E15.smi'
+mkdir -p build/smoke
+cp tests/fixtures/minimal.smi build/smoke/input.smi
+"$SMI2ASS_BIN" build/smoke/input.smi
+grep -Fq 'Build smoke test' build/smoke/input.kor.ass
+echo "Executable smoke test passed: $SMI2ASS_BIN"
