@@ -41,13 +41,24 @@ elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
   "$VENV_PYTHON" -m PyInstaller --onedir --argv-emulation \
     --osx-bundle-identifier com.ahri2nd.smi2ass \
     "${PYINSTALLER_ARGS[@]}"
-  APP_PATH=build/gui-stage/smi2ass.app
+  mkdir -p build/gui-dist
+  APP_PATH="build/gui-dist/smi2ass.$OS_CLASSIFIER.app"
+  rm -rf "$APP_PATH"
+  mv -f build/gui-stage/smi2ass.app "$APP_PATH"
   APP_EXECUTABLE="$APP_PATH/Contents/MacOS/smi2ass"
   "$APP_EXECUTABLE" --smoke-test
-  mkdir -p build/gui-dist
-  APP_ARCHIVE="build/gui-dist/smi2ass.$OS_CLASSIFIER.app.zip"
-  ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ARCHIVE"
-  CHECKSUM_TARGET="$APP_ARCHIVE"
+  DMG_PATH="build/gui-dist/smi2ass.$OS_CLASSIFIER.dmg"
+  DMG_STAGE="build/gui-dmg-stage"
+  rm -rf "$DMG_STAGE"
+  mkdir -p "$DMG_STAGE"
+  ditto "$APP_PATH" "$DMG_STAGE/smi2ass.app"
+  hdiutil create \
+    -volname smi2ass \
+    -srcfolder "$DMG_STAGE" \
+    -ov \
+    -format UDZO \
+    "$DMG_PATH"
+  CHECKSUM_TARGET="$DMG_PATH"
 else
   echo "Unsupported GUI build target: $OS_CLASSIFIER" >&2
   exit 1
@@ -61,4 +72,4 @@ fi
 printf '%s  %s\n' "$SHA256" "$(basename "$CHECKSUM_TARGET")" \
   > "$CHECKSUM_TARGET.sha256"
 echo "SHA256: $SHA256 ($CHECKSUM_TARGET.sha256)"
-echo "GUI package smoke test passed: $CHECKSUM_TARGET"
+echo "GUI build smoke test passed: $CHECKSUM_TARGET"

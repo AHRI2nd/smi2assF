@@ -15,7 +15,10 @@ case "$OS_NAME" in
   Darwin*)
     case "$ARCH" in
       arm64|aarch64) echo osx-arm64 ;;
-      x86_64|amd64) echo osx-x86_64 ;;
+      x86_64|amd64)
+        echo "Intel Mac builds are not supported." >&2
+        exit 1
+        ;;
       *) echo "Unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
     esac
     ;;

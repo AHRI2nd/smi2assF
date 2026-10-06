@@ -1,0 +1,102 @@
+name: Build release draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Tag for the draft release (for example, v1.2.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos-arm64
+          - os: windows-latest
+            platform: windows-x86_64
+    steps:
+      - name: Require master branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/master" ]]; then
+            echo "Run this workflow from the master branch." >&2
+            exit 1
+          fi
+
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        shell: bash
+        run: bash install.sh
+
+      - name: Verify GUI runtime and build package
+        shell: bash
+        run: bash build.sh
+
+      - name: Upload macOS release assets
+        if: matrix.platform == 'macos-arm64'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: smi2ass-release-macos-arm64
+          path: |
+            build/gui-dist/smi2ass.osx-arm64.dmg
+            build/gui-dist/smi2ass.osx-arm64.dmg.sha256
+          if-no-files-found: error
+
+      - name: Upload Windows release assets
+        if: matrix.platform == 'windows-x86_64'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: smi2ass-release-windows-x86_64
+          path: |
+            build/gui-dist/smi2ass.windows-x86_64.exe
+            build/gui-dist/smi2ass.windows-x86_64.exe.sha256
+          if-no-files-found: error
+
+  create-draft-release:
+    name: Create draft release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: smi2ass-release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+            echo "Release tag must look like v1.2.0 or v1.2.0-rc.1." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" \
+            --generate-notes

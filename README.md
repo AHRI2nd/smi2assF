@@ -21,25 +21,29 @@ as a command-line interface.
 
 ## Download
 
-Download a build from the repository's
-[GitHub Actions](https://github.com/AHRI2nd/smi2assF/actions) page. Open a
-successful **Desktop builds** run and download the artifact for your platform:
+Run a build from the repository's
+[GitHub Actions](https://github.com/AHRI2nd/smi2assF/actions) page. The
+**CI checks** workflow runs tests on pushes to `master` and pull requests. To
+build release files, open **Build release draft**, select **Run workflow**, and
+enter a release tag such as `v1.2.0`. The workflow builds Apple Silicon macOS
+and Windows x86-64 versions from `master`, then creates a draft release. Intel
+Mac builds are not provided.
 
 | Artifact | Build |
 | --- | --- |
-| `smi2ass-macos-arm64` | Apple Silicon Mac app archive (`.app.zip`) |
-| `smi2ass-macos-x86_64` | Intel Mac app archive (`.app.zip`) |
-| `smi2ass-windows-x86_64` | Windows application (`.exe`) |
+| `smi2ass-release-macos-arm64` | macOS disk image (`.dmg`) and SHA-256 checksum |
+| `smi2ass-release-windows-x86_64` | Windows application (`.exe`) and SHA-256 checksum |
 
-The workflow runs on pushes to `master`, pull requests, manual dispatches, and
-`v*` tags. A successful tag build also creates a GitHub release containing all
-platform packages and SHA-256 checksum files. Releases, when available, are
-listed on the [Releases page](https://github.com/AHRI2nd/smi2assF/releases).
+Actions artifacts are wrapped once in GitHub's artifact container; extract the
+artifact once to get the `.dmg` or `.exe`. No additional archive is nested
+inside it. The draft release contains the `.dmg` and `.exe` as direct downloads.
+Review the draft and publish it from the
+[Releases page](https://github.com/AHRI2nd/smi2assF/releases) when it is ready.
 
-Extract the macOS archive before opening the app. Builds are not signed or
-notarized; macOS Gatekeeper may require you to Control-click the app and choose
-**Open** on first launch. Windows may show a SmartScreen warning for the
-unsigned executable.
+The macOS `.dmg` opens as a disk image containing `smi2ass.app`. Builds are not
+signed or notarized; macOS Gatekeeper may require you to Control-click the app
+and choose **Open** on first launch. Windows may show a SmartScreen warning for
+the unsigned executable.
 
 ## Use the desktop app
 
@@ -111,10 +115,10 @@ PYTHON=python3.14 bash install.sh
 bash build.sh
 ```
 
-The build scripts create packages for the operating system on which they run.
-GitHub Actions builds macOS Apple Silicon, macOS Intel, and Windows x86-64
-packages on their respective runners, runs the test suite, smoke-tests each
-app, and publishes artifacts with checksums.
+The build scripts support Apple Silicon macOS and Windows x86-64. Pushes to
+`master` and pull requests run tests only. The manual release workflow builds
+both applications from `master`, runs the test suite, smoke-tests each app, and
+creates a draft release with SHA-256 checksums.
 
 ## Project lineage and credits
 
