@@ -10,26 +10,29 @@ else
 fi
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "Python 3.14 was not found: $PYTHON_BIN" >&2
+  echo "Python was not found: $PYTHON_BIN" >&2
   exit 1
 fi
 
-if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info[:2] != (3, 14))'; then
-  echo "Python 3.14 is required to build smi2ass." >&2
+PYTHON_MINOR="$("$PYTHON_BIN" -c 'import sys; print(sys.version_info.minor)')"
+if [[ "$PYTHON_MINOR" != 13 && "$PYTHON_MINOR" != 14 ]] || \
+  ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info.major != 3)'; then
+  echo "Python 3.13 or 3.14 is required to build smi2ass." >&2
   exit 1
 fi
 
 mkdir -p build
-"$PYTHON_BIN" -m venv build/venv-py314
+VENV_DIR="build/venv-py3$PYTHON_MINOR"
+"$PYTHON_BIN" -m venv "$VENV_DIR"
 
-if [[ -x build/venv-py314/bin/python ]]; then
-  VENV_PYTHON=build/venv-py314/bin/python
+if [[ -x "$VENV_DIR/bin/python" ]]; then
+  VENV_PYTHON="$VENV_DIR/bin/python"
 else
-  VENV_PYTHON=build/venv-py314/Scripts/python.exe
+  VENV_PYTHON="$VENV_DIR/Scripts/python.exe"
 fi
 
 "$VENV_PYTHON" -m pip install --upgrade pip
 "$VENV_PYTHON" -m pip install -r requirements-dev.txt
 "$VENV_PYTHON" scripts/prepare_tkdnd.py
 
-echo "Prepared Python 3.14 build environment at build/venv-py314"
+echo "Prepared Python 3.$PYTHON_MINOR build environment at $VENV_DIR"

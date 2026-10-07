@@ -103,7 +103,9 @@ Supported subtitle markup includes `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`,
 
 ## Development
 
-Use Python 3.14. A Python build with Tk support is needed to run the desktop
+Use Python 3.14 on macOS and Python 3.13 on Windows. Python 3.13 keeps Windows
+Tk on Tcl 8.6, which is required by the bundled drag-and-drop runtime. A Python
+build with Tk support is needed to run the desktop
 interface. Install development dependencies, run the tests, and launch the GUI:
 
 ```sh
@@ -112,13 +114,15 @@ python3.14 -m pytest -q
 python3.14 smi2ass_gui.py
 ```
 
-To package the app locally, use a Python 3.14 installation with Tk support on
-the target operating system:
+To package the app locally, use Python 3.14 with Tk support on macOS or Python
+3.13 on Windows:
 
 ```sh
 PYTHON=python3.14 bash install.sh
 bash build.sh
 ```
+
+On Windows, use `PYTHON=python` with Python 3.13 selected in `PATH`.
 
 The build scripts support Apple Silicon macOS and Windows x86-64. Pushes to
 `master` and pull requests run tests only. The manual release workflow builds

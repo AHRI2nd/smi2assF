@@ -34,3 +34,16 @@ def test_windows_installer_installs_project_named_app_per_user():
     assert 'rm -f "$INSTALLER_PATH" "$INSTALLER_PATH.sha256"' in build_script
     assert 'unins000.exe' in build_script
     assert '"$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe" --smoke-test' in build_script
+
+
+def test_windows_release_uses_python_with_tcl_86_for_tkinterdnd():
+    release_workflow = (PROJECT_ROOT / '.github' / 'workflows' / 'release.yml').read_text(
+        encoding='utf-8',
+    )
+    install_script = (PROJECT_ROOT / 'install.sh').read_text(encoding='utf-8')
+    build_script = (PROJECT_ROOT / 'build.sh').read_text(encoding='utf-8')
+
+    assert "python-version: '3.13'" in release_workflow
+    assert 'PYTHON: python' in release_workflow
+    assert '3.13' in install_script
+    assert 'venv-py313' in build_script

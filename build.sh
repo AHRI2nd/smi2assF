@@ -2,24 +2,35 @@
 set -euo pipefail
 
 PRODUCT_NAME="smi2assF"
+OS_CLASSIFIER="$(./os_classifier.sh)"
 
-if [[ -x build/venv-py314/bin/python ]]; then
-  VENV_PYTHON=build/venv-py314/bin/python
-elif [[ -x build/venv-py314/Scripts/python.exe ]]; then
-  VENV_PYTHON=build/venv-py314/Scripts/python.exe
+VENV_PYTHON=""
+if [[ "$OS_CLASSIFIER" == windows-* ]]; then
+  VENV_CANDIDATES=(build/venv-py313 build/venv-py314)
 else
+  VENV_CANDIDATES=(build/venv-py314 build/venv-py313)
+fi
+for VENV_DIR in "${VENV_CANDIDATES[@]}"; do
+  if [[ -x "$VENV_DIR/bin/python" ]]; then
+    VENV_PYTHON="$VENV_DIR/bin/python"
+    break
+  elif [[ -x "$VENV_DIR/Scripts/python.exe" ]]; then
+    VENV_PYTHON="$VENV_DIR/Scripts/python.exe"
+    break
+  fi
+done
+if [[ -z "$VENV_PYTHON" ]]; then
   echo "Build environment not found. Run install.sh first." >&2
   exit 1
 fi
 
-"$VENV_PYTHON" -c 'import sys; raise SystemExit(sys.version_info[:2] != (3, 14))'
+"$VENV_PYTHON" -c 'import sys; raise SystemExit(sys.version_info.major != 3 or sys.version_info.minor not in (13, 14))'
 "$VENV_PYTHON" -c 'import tkinter; import tkinterdnd2'
 "$VENV_PYTHON" -m pytest -q
 
 export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-$PWD/build/pyinstaller-config}"
 mkdir -p "$PYINSTALLER_CONFIG_DIR"
 
-OS_CLASSIFIER="$(./os_classifier.sh)"
 mkdir -p build/gui-dist
 rm -rf build/gui-dist/smi2ass.*
 PYINSTALLER_ARGS=(
