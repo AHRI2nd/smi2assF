@@ -31,7 +31,8 @@ PYINSTALLER_ARGS=(
 )
 
 if [[ "$OS_CLASSIFIER" == windows-* ]]; then
-  PYINSTALLER_ARGS+=(--icon assets/smi2ass.ico)
+  ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"
+  PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
   "$VENV_PYTHON" -m PyInstaller --onefile "${PYINSTALLER_ARGS[@]}"
   mkdir -p build/gui-dist
   SMI2ASS_BIN="build/gui-dist/smi2ass.$OS_CLASSIFIER.exe"
@@ -39,7 +40,8 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
   "$SMI2ASS_BIN" --smoke-test
   CHECKSUM_TARGET="$SMI2ASS_BIN"
 elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
-  PYINSTALLER_ARGS+=(--icon assets/smi2ass.icns)
+  ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"
+  PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
   "$VENV_PYTHON" -m PyInstaller --onedir --argv-emulation \
     --osx-bundle-identifier com.ahri2nd.smi2ass \
     "${PYINSTALLER_ARGS[@]}"
