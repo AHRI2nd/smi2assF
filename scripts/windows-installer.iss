@@ -9,6 +9,7 @@ DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 Uninstallable=yes
+DisableStartupPrompt=yes
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64

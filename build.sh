@@ -50,24 +50,31 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
   PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
   "$VENV_PYTHON" -m PyInstaller --onefile "${PYINSTALLER_ARGS[@]}"
   PAYLOAD_PATH="build/gui-stage/$PRODUCT_NAME.exe"
-  "$PAYLOAD_PATH" --smoke-test
+  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 60 --label "payload smoke" -- \
+    "$PAYLOAD_PATH" --smoke-test
   if ! command -v ISCC.exe >/dev/null 2>&1; then
     echo "Inno Setup compiler ISCC.exe is required to build the Windows installer." >&2
     exit 1
   fi
   INSTALLER_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.exe"
   rm -f "$INSTALLER_PATH" "$INSTALLER_PATH.sha256"
-  ISCC.exe scripts/windows-installer.iss
+  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 120 --label "installer compile" -- \
+    ISCC.exe scripts/windows-installer.iss
   test -s "$INSTALLER_PATH"
 
   INSTALL_SMOKE_DIR="$PWD/build/installer-smoke"
   INSTALL_SMOKE_DIR_WIN="$(cygpath -w "$INSTALL_SMOKE_DIR")"
   rm -rf "$INSTALL_SMOKE_DIR"
-  "$INSTALLER_PATH" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART \
-    "/DIR=$INSTALL_SMOKE_DIR_WIN"
+  mkdir -p "$INSTALL_SMOKE_DIR"
+  echo "[build] Installer install diagnostics: $INSTALL_SMOKE_DIR/install.log"
+  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 120 --label "installer install" -- \
+    "$INSTALLER_PATH" /SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART \
+    "/LOG=$INSTALL_SMOKE_DIR/install.log" "/DIR=$INSTALL_SMOKE_DIR_WIN"
   test -s "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe"
-  "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe" --smoke-test
-  "$INSTALL_SMOKE_DIR/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 60 --label "installed app smoke" -- \
+    "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe" --smoke-test
+  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 60 --label "uninstall" -- \
+    "$INSTALL_SMOKE_DIR/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
   if [[ -e "$INSTALL_SMOKE_DIR" ]]; then
     echo "Windows installer smoke test left files after uninstall." >&2
     exit 1

@@ -47,3 +47,26 @@ def test_windows_release_uses_python_with_tcl_86_for_tkinterdnd():
     assert 'PYTHON: python' in release_workflow
     assert '3.13' in install_script
     assert 'venv-py313' in build_script
+
+
+def test_windows_installer_smoke_is_silent_diagnostic_and_bounded():
+    installer_script = WINDOWS_INSTALLER_SCRIPT.read_text(encoding='utf-8')
+    build_script = BUILD_SCRIPT.read_text(encoding='utf-8')
+    release_workflow = (PROJECT_ROOT / '.github' / 'workflows' / 'release.yml').read_text(
+        encoding='utf-8',
+    )
+
+    assert 'DisableStartupPrompt=yes' in installer_script
+    assert 'scripts/run_with_timeout.py' in build_script
+    assert '/SP-' in build_script
+    assert '/LOG=' in build_script
+    assert 'timeout-minutes:' in release_workflow
+
+
+def test_windows_smoke_commands_have_progress_labels_and_timeouts():
+    build_script = BUILD_SCRIPT.read_text(encoding='utf-8')
+
+    for stage in ('payload smoke', 'installer compile', 'installer install', 'installed app smoke', 'uninstall'):
+        assert stage in build_script
+
+    assert build_script.count('scripts/run_with_timeout.py --timeout-seconds') == 5
