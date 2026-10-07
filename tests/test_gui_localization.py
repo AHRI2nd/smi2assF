@@ -11,5 +11,5 @@ def test_detect_ui_language_uses_english_for_other_device_locales():
 
 
 def test_localized_text_uses_korean_or_english_copy():
-    assert localized_text('drop_hint', 'ko') == '여기에 SMI 파일 또는 폴더를 놓으세요'
-    assert localized_text('drop_hint', 'en') == 'Drop SMI files or folders here'
+    assert localized_text('drop_hint', 'ko') == '.smi 파일 또는 폴더를 여기에 놓으세요'
+    assert localized_text('drop_hint', 'en') == 'Drop .smi files or folders here'

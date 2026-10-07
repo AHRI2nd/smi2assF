@@ -6,8 +6,9 @@ as a command-line interface.
 
 ## Features
 
-- Add subtitle files or folders by dragging them into the app or using the file
-  and folder pickers.
+- Convert dropped subtitle files or folders immediately. Folders are searched
+  recursively.
+- Show the desktop interface in Korean or English based on the device language.
 - When adding a folder, search its subfolders recursively. The desktop app
   accepts files whose extension is exactly `.smi` or `.SMI`.
 - Write each `.ass` beside its source `.smi`; source files are left in place.
@@ -49,11 +50,11 @@ the unsigned executable.
 ## Use the desktop app
 
 1. Open `smi2ass.app` on macOS or `smi2ass.exe` on Windows.
-2. Drag `.smi` or `.SMI` files or folders into the drop area, or use **파일
-   선택** / **폴더 선택**.
-3. Review the discovered files and choose whether to overwrite existing ASS
-   outputs.
-4. Select **변환 시작**. Results are written beside each source file.
+2. Drag `.smi` or `.SMI` files or folders into the drop area. Conversion starts
+   immediately, and results are written beside each source file.
+3. Turn on **기존 ASS 파일 덮어쓰기** at the bottom only when existing outputs
+   should be replaced. The desktop interface follows the device language and
+   uses Korean or English.
 
 Folders are searched recursively. Other extensions, including mixed-case
 variants such as `.Smi`, are not added by the desktop app. When a source
