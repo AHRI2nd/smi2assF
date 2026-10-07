@@ -9,13 +9,14 @@ from tkinter import filedialog, messagebox, ttk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from smi2ass import convert_smi_file
-from smi2ass_gui_support import scan_smi_files
+from smi2ass_gui_support import detect_ui_language, localized_text, scan_smi_files
 
 
 class Smi2AssApp:
     def __init__(self, root=None):
         self.root = root or TkinterDnD.Tk()
-        self.root.title('SMI to ASS Converter')
+        self.language = detect_ui_language()
+        self.root.title(self._text('window_title'))
         self.root.minsize(720, 520)
         self.root.protocol('WM_DELETE_WINDOW', self._close)
 
@@ -29,23 +30,26 @@ class Smi2AssApp:
         self.root.drop_target_register(DND_FILES)
         self.root.dnd_bind('<<Drop>>', self._on_drop)
 
+    def _text(self, key, **values):
+        return localized_text(key, self.language, **values)
+
     def _build_ui(self):
         frame = ttk.Frame(self.root, padding=16)
         frame.pack(fill='both', expand=True)
 
         ttk.Label(
             frame,
-            text='SMI 자막을 ASS로 변환',
+            text=self._text('heading'),
             font=('TkDefaultFont', 18, 'bold'),
         ).pack(anchor='w')
         ttk.Label(
             frame,
-            text='파일이나 폴더를 아래 영역에 끌어 놓으세요. 폴더는 하위 폴더까지 검색합니다.',
+            text=self._text('intro'),
         ).pack(anchor='w', pady=(4, 12))
 
         self.drop_zone = ttk.Label(
             frame,
-            text='.smi / .SMI 파일 또는 폴더 놓기',
+            text=self._text('drop_hint'),
             anchor='center',
             padding=22,
             relief='groove',
@@ -56,20 +60,20 @@ class Smi2AssApp:
 
         actions = ttk.Frame(frame)
         actions.pack(fill='x', pady=(0, 8))
-        self.add_files_button = ttk.Button(actions, text='파일 선택', command=self._choose_files)
+        self.add_files_button = ttk.Button(actions, text=self._text('file_button'), command=self._choose_files)
         self.add_files_button.pack(side='left')
-        self.add_folder_button = ttk.Button(actions, text='폴더 선택', command=self._choose_folder)
+        self.add_folder_button = ttk.Button(actions, text=self._text('folder_button'), command=self._choose_folder)
         self.add_folder_button.pack(side='left', padx=(8, 0))
-        self.remove_button = ttk.Button(actions, text='선택 제거', command=self._remove_selected)
+        self.remove_button = ttk.Button(actions, text=self._text('remove_button'), command=self._remove_selected)
         self.remove_button.pack(side='left', padx=(8, 0))
-        self.clear_button = ttk.Button(actions, text='전체 비우기', command=self._clear)
+        self.clear_button = ttk.Button(actions, text=self._text('clear_button'), command=self._clear)
         self.clear_button.pack(side='left', padx=(8, 0))
 
         columns = ('name', 'path', 'status')
         self.file_list = ttk.Treeview(frame, columns=columns, show='headings', height=9)
-        self.file_list.heading('name', text='파일')
-        self.file_list.heading('path', text='위치')
-        self.file_list.heading('status', text='상태')
+        self.file_list.heading('name', text=self._text('file_column'))
+        self.file_list.heading('path', text=self._text('path_column'))
+        self.file_list.heading('status', text=self._text('status_column'))
         self.file_list.column('name', width=190, stretch=False)
         self.file_list.column('path', width=360, stretch=True)
         self.file_list.column('status', width=160, stretch=False)
@@ -79,13 +83,13 @@ class Smi2AssApp:
         options.pack(fill='x', pady=(8, 4))
         self.overwrite_checkbox = ttk.Checkbutton(
             options,
-            text='기존 ASS 파일 덮어쓰기',
+            text=self._text('overwrite'),
             variable=self.overwrite_existing,
         )
         self.overwrite_checkbox.pack(side='left')
         self.convert_button = ttk.Button(
             options,
-            text='변환 시작',
+            text=self._text('start'),
             command=self._start_conversion,
             state='disabled',
         )
@@ -93,16 +97,16 @@ class Smi2AssApp:
 
         self.progress = ttk.Progressbar(frame, mode='determinate')
         self.progress.pack(fill='x', pady=(6, 4))
-        self.status_label = ttk.Label(frame, text='변환할 .smi 파일을 추가하세요.')
+        self.status_label = ttk.Label(frame, text=self._text('status_add_hint'))
         self.status_label.pack(anchor='w')
 
-        ttk.Label(frame, text='변환 내역').pack(anchor='w', pady=(10, 3))
+        ttk.Label(frame, text=self._text('history')).pack(anchor='w', pady=(10, 3))
         self.log = tk.Text(frame, height=7, wrap='word', state='disabled')
         self.log.pack(fill='x')
 
     def add_paths(self, paths):
         if self.busy:
-            self.status_label.configure(text='현재 변환이 끝난 뒤 파일을 추가해 주세요.')
+            self.status_label.configure(text=self._text('status_busy_add'))
             return 0
 
         scan_result = scan_smi_files(paths)
@@ -116,23 +120,23 @@ class Smi2AssApp:
             self.row_ids[path] = item_id
             self.file_list.insert(
                 '', 'end', iid=item_id,
-                values=(path.name, str(path.parent), '대기'),
+                values=(path.name, str(path.parent), self._text('status_pending')),
             )
             added += 1
 
         if added:
-            self.status_label.configure(text='%d개 파일을 목록에 추가했습니다.' % added)
+            self.status_label.configure(text=self._text('status_added', count=added))
             self.convert_button.configure(state='normal')
         elif not found and not scan_result.errors:
-            self.status_label.configure(text='.smi 또는 .SMI 파일을 찾지 못했습니다.')
+            self.status_label.configure(text=self._text('status_no_files'))
         elif not added and self.files and not scan_result.errors:
-            self.status_label.configure(text='이미 목록에 있는 파일입니다.')
+            self.status_label.configure(text=self._text('status_duplicate'))
         for path, error in scan_result.errors:
-            self._append_log('%s: 폴더 검색 오류: %s' % (path, error))
+            self._append_log(self._text('log_folder_error', path=path, error=error))
         if scan_result.errors:
-            self.status_label.configure(
-                text='%d개 파일 추가, %d개 위치 검색 실패' % (added, len(scan_result.errors))
-            )
+            self.status_label.configure(text=self._text(
+                'status_scan_errors', added=added, errors=len(scan_result.errors),
+            ))
         return added
 
     def _on_drop(self, event):
@@ -142,14 +146,17 @@ class Smi2AssApp:
     def _choose_files(self):
         paths = filedialog.askopenfilenames(
             parent=self.root,
-            title='SMI 파일 선택',
-            filetypes=(('SMI 자막', '*.smi *.SMI'), ('모든 파일', '*')),
+            title=self._text('dialog_select_files'),
+            filetypes=(
+                (self._text('smi_filter'), '*.smi *.SMI'),
+                (self._text('all_files'), '*'),
+            ),
         )
         if paths:
             self.add_paths(paths)
 
     def _choose_folder(self):
-        path = filedialog.askdirectory(parent=self.root, title='자막 폴더 선택')
+        path = filedialog.askdirectory(parent=self.root, title=self._text('dialog_select_folder'))
         if path:
             self.add_paths([path])
 
@@ -162,7 +169,7 @@ class Smi2AssApp:
             self.file_list.delete(item_id)
         self.row_ids = {path: self.row_ids[path] for path in self.files}
         self.convert_button.configure(state='normal' if self.files else 'disabled')
-        self.status_label.configure(text='%d개 파일이 목록에 남았습니다.' % len(self.files))
+        self.status_label.configure(text=self._text('status_remaining', count=len(self.files)))
 
     def _clear(self):
         if self.busy:
@@ -173,7 +180,7 @@ class Smi2AssApp:
             self.file_list.delete(item_id)
         self.convert_button.configure(state='disabled')
         self.progress.configure(value=0)
-        self.status_label.configure(text='변환할 .smi 파일을 추가하세요.')
+        self.status_label.configure(text=self._text('status_add_hint'))
 
     def _append_log(self, message):
         self.log.configure(state='normal')
@@ -195,9 +202,10 @@ class Smi2AssApp:
         self.convert_button.configure(state='disabled')
         self.overwrite_checkbox.configure(state='disabled')
         self._set_controls_enabled(False)
-        self.status_label.configure(text='변환 중입니다. 0 / %d' % self._total)
-        self._append_log('변환을 시작합니다. 기존 ASS 덮어쓰기: %s' % (
-            '예' if self.overwrite_existing.get() else '아니요',
+        self.status_label.configure(text=self._text('status_converting', completed=0, total=self._total))
+        self._append_log(self._text(
+            'log_conversion_start',
+            overwrite=self._text('yes' if self.overwrite_existing.get() else 'no'),
         ))
 
         worker = threading.Thread(
@@ -242,18 +250,18 @@ class Smi2AssApp:
                 self._failed += 1
                 self._completed += 1
                 self.progress.configure(value=self._completed)
-                self.file_list.set(self.row_ids[path], 'status', '오류')
-                self._append_log('%s: 오류: %s' % (path, error))
+                self.file_list.set(self.row_ids[path], 'status', self._text('status_error'))
+                self._append_log(self._text('log_error', path=path, error=error))
             elif event[0] == 'done':
                 self.busy = False
                 self._set_controls_enabled(True)
                 self.overwrite_checkbox.configure(state='normal')
                 self.convert_button.configure(state='normal' if self.files else 'disabled')
                 self.status_label.configure(
-                    text='완료: %d / %d, 복구: %d, 자막 건너뜀: %d, '
-                    '기존 결과 건너뜀: %d, 오류: %d' % (
-                        self._completed, self._total, self._repaired_diagnostics,
-                        self._skipped_cues, self._skipped_existing, self._failed,
+                    text=self._text(
+                        'status_done', completed=self._completed, total=self._total,
+                        repaired=self._repaired_diagnostics, skipped=self._skipped_cues,
+                        existing=self._skipped_existing, failed=self._failed,
                     )
                 )
 
@@ -270,33 +278,35 @@ class Smi2AssApp:
         )
         self.progress.configure(value=self._completed)
         self.status_label.configure(
-            text='변환 중입니다. %d / %d' % (self._completed, self._total)
+            text=self._text('status_converting', completed=self._completed, total=self._total)
         )
         if result.skipped_existing:
             self._skipped_existing += len(result.skipped_existing)
             if result.outputs:
-                self.file_list.set(self.row_ids[path], 'status', '완료 (일부 유지)')
+                self.file_list.set(self.row_ids[path], 'status', self._text('status_partial_existing'))
             else:
-                self.file_list.set(self.row_ids[path], 'status', '기존 ASS로 건너뜀')
+                self.file_list.set(self.row_ids[path], 'status', self._text('status_existing'))
             for output in result.skipped_existing:
-                self._append_log('%s: 기존 결과를 유지했습니다.' % output)
+                self._append_log(self._text('log_existing_kept', path=output))
         elif any(item.severity == 'skip' for item in result.diagnostics):
-            self.file_list.set(self.row_ids[path], 'status', '일부 자막 건너뜀')
+            self.file_list.set(self.row_ids[path], 'status', self._text('status_skipped_cues'))
         else:
-            self.file_list.set(self.row_ids[path], 'status', '완료')
+            self.file_list.set(self.row_ids[path], 'status', self._text('status_complete'))
 
         for output in result.outputs:
-            self._append_log('%s → %s' % (path, output))
+            self._append_log(self._text('log_output', source=path, output=output))
         for diagnostic in result.diagnostics:
-            self._append_log(
-                '%s:%d [%s] %s' % (
-                    path, diagnostic.line, diagnostic.severity, diagnostic.message,
-                )
-            )
+            self._append_log(self._text(
+                'log_diagnostic', path=path, line=diagnostic.line,
+                severity=diagnostic.severity, message=diagnostic.message,
+            ))
 
     def _close(self):
         if self.busy:
-            messagebox.showinfo('변환 중', '변환이 끝난 뒤 앱을 닫아 주세요.', parent=self.root)
+            messagebox.showinfo(
+                self._text('dialog_busy_title'), self._text('dialog_busy_message'),
+                parent=self.root,
+            )
             return
         self.root.destroy()
 
