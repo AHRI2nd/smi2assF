@@ -38,11 +38,30 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
   ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"
   PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
   "$VENV_PYTHON" -m PyInstaller --onefile "${PYINSTALLER_ARGS[@]}"
-  mkdir -p build/gui-dist
-  APP_EXECUTABLE="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.exe"
-  mv -f "build/gui-stage/$PRODUCT_NAME.exe" "$APP_EXECUTABLE"
-  "$APP_EXECUTABLE" --smoke-test
-  CHECKSUM_TARGET="$APP_EXECUTABLE"
+  PAYLOAD_PATH="build/gui-stage/$PRODUCT_NAME.exe"
+  "$PAYLOAD_PATH" --smoke-test
+  if ! command -v ISCC.exe >/dev/null 2>&1; then
+    echo "Inno Setup compiler ISCC.exe is required to build the Windows installer." >&2
+    exit 1
+  fi
+  INSTALLER_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.exe"
+  rm -f "$INSTALLER_PATH" "$INSTALLER_PATH.sha256"
+  ISCC.exe scripts/windows-installer.iss
+  test -s "$INSTALLER_PATH"
+
+  INSTALL_SMOKE_DIR="$PWD/build/installer-smoke"
+  INSTALL_SMOKE_DIR_WIN="$(cygpath -w "$INSTALL_SMOKE_DIR")"
+  rm -rf "$INSTALL_SMOKE_DIR"
+  "$INSTALLER_PATH" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART \
+    "/DIR=$INSTALL_SMOKE_DIR_WIN"
+  test -s "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe"
+  "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe" --smoke-test
+  "$INSTALL_SMOKE_DIR/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  if [[ -e "$INSTALL_SMOKE_DIR" ]]; then
+    echo "Windows installer smoke test left files after uninstall." >&2
+    exit 1
+  fi
+  CHECKSUM_TARGET="$INSTALLER_PATH"
 elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
   ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"
   PYINSTALLER_ARGS+=(--icon "$ICON_PATH")

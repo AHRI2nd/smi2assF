@@ -33,7 +33,7 @@ Mac builds are not provided.
 | Artifact | Build |
 | --- | --- |
 | `smi2assF.osx-arm64.dmg` | macOS disk image containing `smi2assF.app` |
-| `smi2assF.windows-x86_64.exe` | Windows application |
+| `smi2assF.windows-x86_64.exe` | Windows installer that installs `smi2assF.exe` |
 | `*.sha256` | SHA-256 checksums for the release files |
 
 Actions artifacts are uploaded as individual files without ZIP packaging.
@@ -49,7 +49,10 @@ the unsigned executable.
 
 ## Use the desktop app
 
-1. Open `smi2assF.app` on macOS or `smi2assF.windows-x86_64.exe` on Windows.
+1. Open `smi2assF.app` on macOS. On Windows, run
+   `smi2assF.windows-x86_64.exe` to install the app, then launch `smi2assF`
+   from the Start menu. The installer places `smi2assF.exe` in your local
+   `%LOCALAPPDATA%\Programs\smi2assF` folder and adds an uninstaller.
 2. Drag `.smi` or `.SMI` files or folders into the drop area. Conversion starts
    immediately, and results are written beside each source file.
 3. Turn on **기존 ASS 파일 덮어쓰기** at the bottom only when existing outputs
