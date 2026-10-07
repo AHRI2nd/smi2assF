@@ -54,6 +54,7 @@ def run_with_timeout(
         raise ValueError('command must not be empty')
 
     print(f'[build] START {label} (timeout: {timeout_seconds:g}s)', flush=True)
+    print(f'[build] Command arguments: {list(command)!r}', flush=True)
     popen_options: dict[str, object] = {}
     if os.name == 'nt':
         popen_options['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP

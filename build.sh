@@ -62,23 +62,7 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
     ISCC.exe scripts/windows-installer.iss
   test -s "$INSTALLER_PATH"
 
-  INSTALL_SMOKE_DIR="$PWD/build/installer-smoke"
-  INSTALL_SMOKE_DIR_WIN="$(cygpath -w "$INSTALL_SMOKE_DIR")"
-  rm -rf "$INSTALL_SMOKE_DIR"
-  mkdir -p "$INSTALL_SMOKE_DIR"
-  echo "[build] Installer install diagnostics: $INSTALL_SMOKE_DIR/install.log"
-  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 120 --label "installer install" -- \
-    "$INSTALLER_PATH" /SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART \
-    "/LOG=$INSTALL_SMOKE_DIR/install.log" "/DIR=$INSTALL_SMOKE_DIR_WIN"
-  test -s "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe"
-  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 60 --label "installed app smoke" -- \
-    "$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe" --smoke-test
-  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 60 --label "uninstall" -- \
-    "$INSTALL_SMOKE_DIR/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-  if [[ -e "$INSTALL_SMOKE_DIR" ]]; then
-    echo "Windows installer smoke test left files after uninstall." >&2
-    exit 1
-  fi
+  "$VENV_PYTHON" -m scripts.windows_installer_smoke "$INSTALLER_PATH"
   CHECKSUM_TARGET="$INSTALLER_PATH"
 elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
   ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"

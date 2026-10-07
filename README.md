@@ -30,6 +30,11 @@ enter a release tag such as `v1.2.0`. The workflow builds Apple Silicon macOS
 and Windows x86-64 versions from `master`, then creates a draft release. Intel
 Mac builds are not provided.
 
+Select **verify_only** to run the same package builds and smoke tests without
+creating a release draft. Windows builds verify installation, the installed app,
+and uninstallation. Installer diagnostic logs are saved as a separate artifact
+on both successful and failed runs.
+
 | Artifact | Build |
 | --- | --- |
 | `smi2assF.osx-arm64.dmg` | macOS disk image containing `smi2assF.app` |
@@ -128,6 +133,7 @@ The build scripts support Apple Silicon macOS and Windows x86-64. Pushes to
 `master` and pull requests run tests only. The manual release workflow builds
 both applications from `master`, runs the test suite, smoke-tests each app, and
 creates a draft release with SHA-256 checksums.
+Enable **verify_only** when validating packaging changes without creating a draft.
 
 ## Project lineage and credits
 

@@ -7,6 +7,11 @@ on:
         description: Tag for the draft release (for example, v1.2.0)
         required: true
         type: string
+      verify_only:
+        description: Build and verify packages without creating a release draft
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -57,6 +62,14 @@ jobs:
         shell: bash
         run: bash build.sh
 
+      - name: Preserve Windows installer diagnostics
+        if: ${{ always() && matrix.platform == 'windows-x86_64' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: windows-installer-diagnostics
+          path: build/installer-smoke-logs/
+          if-no-files-found: ignore
+
       - name: Upload release file without ZIP packaging
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -73,6 +86,7 @@ jobs:
 
   create-draft-release:
     name: Create draft release
+    if: ${{ !inputs.verify_only }}
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5

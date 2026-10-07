@@ -32,8 +32,7 @@ def test_windows_installer_installs_project_named_app_per_user():
     assert 'Uninstallable=yes' in installer_script
     assert 'ISCC.exe scripts/windows-installer.iss' in build_script
     assert 'rm -f "$INSTALLER_PATH" "$INSTALLER_PATH.sha256"' in build_script
-    assert 'unins000.exe' in build_script
-    assert '"$INSTALL_SMOKE_DIR/$PRODUCT_NAME.exe" --smoke-test' in build_script
+    assert '-m scripts.windows_installer_smoke "$INSTALLER_PATH"' in build_script
 
 
 def test_windows_release_uses_python_with_tcl_86_for_tkinterdnd():
@@ -58,15 +57,7 @@ def test_windows_installer_smoke_is_silent_diagnostic_and_bounded():
 
     assert 'DisableStartupPrompt=yes' in installer_script
     assert 'scripts/run_with_timeout.py' in build_script
-    assert '/SP-' in build_script
-    assert '/LOG=' in build_script
+    assert '-m scripts.windows_installer_smoke "$INSTALLER_PATH"' in build_script
+    assert '/VERYSILENT' not in build_script
+    assert '/LOG=' not in build_script
     assert 'timeout-minutes:' in release_workflow
-
-
-def test_windows_smoke_commands_have_progress_labels_and_timeouts():
-    build_script = BUILD_SCRIPT.read_text(encoding='utf-8')
-
-    for stage in ('payload smoke', 'installer compile', 'installer install', 'installed app smoke', 'uninstall'):
-        assert stage in build_script
-
-    assert build_script.count('scripts/run_with_timeout.py --timeout-seconds') == 5
