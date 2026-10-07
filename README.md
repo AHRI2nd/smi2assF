@@ -32,8 +32,8 @@ Mac builds are not provided.
 
 | Artifact | Build |
 | --- | --- |
-| `smi2ass.osx-arm64.dmg` | macOS disk image containing `smi2ass.app` |
-| `smi2ass.windows-x86_64.exe` | Windows application |
+| `smi2assF.osx-arm64.dmg` | macOS disk image containing `smi2assF.app` |
+| `smi2assF.windows-x86_64.exe` | Windows application |
 | `*.sha256` | SHA-256 checksums for the release files |
 
 Actions artifacts are uploaded as individual files without ZIP packaging.
@@ -42,14 +42,14 @@ files and their checksums as direct downloads.
 Review the draft and publish it from the
 [Releases page](https://github.com/AHRI2nd/smi2assF/releases) when it is ready.
 
-The macOS `.dmg` opens as a disk image containing `smi2ass.app`. Builds are not
+The macOS `.dmg` opens as a disk image containing `smi2assF.app`. Builds are not
 signed or notarized; macOS Gatekeeper may require you to Control-click the app
 and choose **Open** on first launch. Windows may show a SmartScreen warning for
 the unsigned executable.
 
 ## Use the desktop app
 
-1. Open `smi2ass.app` on macOS or `smi2ass.exe` on Windows.
+1. Open `smi2assF.app` on macOS or `smi2assF.windows-x86_64.exe` on Windows.
 2. Drag `.smi` or `.SMI` files or folders into the drop area. Conversion starts
    immediately, and results are written beside each source file.
 3. Turn on **기존 ASS 파일 덮어쓰기** at the bottom only when existing outputs

@@ -21,10 +21,10 @@ jobs:
         include:
           - os: macos-latest
             platform: macos-arm64
-            asset: smi2ass.osx-arm64.dmg
+            asset: smi2assF.osx-arm64.dmg
           - os: windows-latest
             platform: windows-x86_64
-            asset: smi2ass.windows-x86_64.exe
+            asset: smi2assF.windows-x86_64.exe
     steps:
       - name: Require master branch
         shell: bash
@@ -76,7 +76,7 @@ jobs:
       - name: Download release assets
         uses: actions/download-artifact@v8.0.1
         with:
-          pattern: smi2ass.*
+          pattern: smi2assF.*
           path: release-assets
           merge-multiple: true
 
@@ -84,10 +84,10 @@ jobs:
         shell: bash
         run: |
           cd release-assets
-          test -s smi2ass.osx-arm64.dmg
-          test -s smi2ass.windows-x86_64.exe
-          sha256sum --check smi2ass.osx-arm64.dmg.sha256
-          sha256sum --check smi2ass.windows-x86_64.exe.sha256
+          test -s smi2assF.osx-arm64.dmg
+          test -s smi2assF.windows-x86_64.exe
+          sha256sum --check smi2assF.osx-arm64.dmg.sha256
+          sha256sum --check smi2assF.windows-x86_64.exe.sha256
 
       - name: Create GitHub release draft
         env:

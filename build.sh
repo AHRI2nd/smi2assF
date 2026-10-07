@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PRODUCT_NAME="smi2assF"
+
 if [[ -x build/venv-py314/bin/python ]]; then
   VENV_PYTHON=build/venv-py314/bin/python
 elif [[ -x build/venv-py314/Scripts/python.exe ]]; then
@@ -18,11 +20,13 @@ export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-$PWD/build/pyinstaller-
 mkdir -p "$PYINSTALLER_CONFIG_DIR"
 
 OS_CLASSIFIER="$(./os_classifier.sh)"
+mkdir -p build/gui-dist
+rm -rf build/gui-dist/smi2ass.*
 PYINSTALLER_ARGS=(
   --noconfirm
   --clean
   --windowed
-  --name smi2ass
+  --name "$PRODUCT_NAME"
   --collect-all tkinterdnd2
   --distpath build/gui-stage
   --workpath build/gui-work
@@ -35,29 +39,29 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
   PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
   "$VENV_PYTHON" -m PyInstaller --onefile "${PYINSTALLER_ARGS[@]}"
   mkdir -p build/gui-dist
-  SMI2ASS_BIN="build/gui-dist/smi2ass.$OS_CLASSIFIER.exe"
-  mv -f build/gui-stage/smi2ass.exe "$SMI2ASS_BIN"
-  "$SMI2ASS_BIN" --smoke-test
-  CHECKSUM_TARGET="$SMI2ASS_BIN"
+  APP_EXECUTABLE="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.exe"
+  mv -f "build/gui-stage/$PRODUCT_NAME.exe" "$APP_EXECUTABLE"
+  "$APP_EXECUTABLE" --smoke-test
+  CHECKSUM_TARGET="$APP_EXECUTABLE"
 elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
   ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"
   PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
   "$VENV_PYTHON" -m PyInstaller --onedir --argv-emulation \
-    --osx-bundle-identifier com.ahri2nd.smi2ass \
+    --osx-bundle-identifier com.ahri2nd.smi2assf \
     "${PYINSTALLER_ARGS[@]}"
   mkdir -p build/gui-dist
-  APP_PATH="build/gui-dist/smi2ass.$OS_CLASSIFIER.app"
+  APP_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.app"
   rm -rf "$APP_PATH"
-  mv -f build/gui-stage/smi2ass.app "$APP_PATH"
-  APP_EXECUTABLE="$APP_PATH/Contents/MacOS/smi2ass"
+  mv -f "build/gui-stage/$PRODUCT_NAME.app" "$APP_PATH"
+  APP_EXECUTABLE="$APP_PATH/Contents/MacOS/$PRODUCT_NAME"
   "$APP_EXECUTABLE" --smoke-test
-  DMG_PATH="build/gui-dist/smi2ass.$OS_CLASSIFIER.dmg"
+  DMG_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.dmg"
   DMG_STAGE="build/gui-dmg-stage"
   rm -rf "$DMG_STAGE"
   mkdir -p "$DMG_STAGE"
-  ditto "$APP_PATH" "$DMG_STAGE/smi2ass.app"
+  ditto "$APP_PATH" "$DMG_STAGE/$PRODUCT_NAME.app"
   hdiutil create \
-    -volname smi2ass \
+    -volname "$PRODUCT_NAME" \
     -srcfolder "$DMG_STAGE" \
     -ov \
     -format UDZO \
