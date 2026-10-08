@@ -21,8 +21,8 @@ class Smi2AssApp:
         self.root = root or TkinterDnD.Tk()
         self.language = detect_ui_language()
         self.root.title(self._text('window_title'))
-        self.root.geometry('520x380')
-        self.root.minsize(360, 280)
+        self.root.geometry('400x280')
+        self.root.minsize(320, 260)
         self.root.protocol('WM_DELETE_WINDOW', self._close)
 
         self.events = queue.Queue()
@@ -37,7 +37,7 @@ class Smi2AssApp:
         return localized_text(key, self.language, **values)
 
     def _build_ui(self):
-        frame = ttk.Frame(self.root, padding=20)
+        frame = ttk.Frame(self.root, padding=16)
         frame.pack(fill='both', expand=True)
 
         self.drop_zone = ttk.Label(
@@ -45,10 +45,10 @@ class Smi2AssApp:
             text=self._text('drop_hint'),
             anchor='center',
             justify='center',
-            wraplength=440,
-            padding=32,
+            wraplength=240,
+            padding=16,
             relief='groove',
-            font=('TkDefaultFont', 16, 'bold'),
+            font=('TkDefaultFont', 14, 'bold'),
         )
         self.drop_zone.pack(fill='both', expand=True)
         self.drop_zone.drop_target_register(DND_FILES)
@@ -59,7 +59,7 @@ class Smi2AssApp:
             text=self._text('overwrite'),
             variable=self.overwrite_existing,
         )
-        self.overwrite_checkbox.pack(anchor='center', pady=(16, 0))
+        self.overwrite_checkbox.pack(anchor='center', pady=(8, 0))
 
     def add_paths(self, paths):
         if self.busy:
