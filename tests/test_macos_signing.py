@@ -252,7 +252,7 @@ def test_dmg_verifies_enclosed_app_and_detaches_after_smoke_failure(tmp_path, mo
         signing.process_dmg(dmg, signing_environment(tmp_path))
     assert ['xcrun', 'stapler', 'staple', str(dmg)] in commands
     assert any(command[:2] == ['hdiutil', 'detach'] for command in commands)
-    assert any(command[:2] == ['spctl', '--assess'] and command[-1].endswith('/smi2assF.app') for command in commands)
+    assert any(command[:2] == ['spctl', '--assess'] and Path(command[-1]).name == 'smi2assF.app' for command in commands)
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='The macOS native command runner uses POSIX process groups.')
