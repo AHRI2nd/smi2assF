@@ -1,6 +1,7 @@
 import pytest
 import weakref
 import gc
+import tkinter as tk
 
 pytest.importorskip('_tkinter')
 from tkinterdnd2 import TkinterDnD
@@ -141,7 +142,11 @@ def test_actual_mac_appearance_updates_palette_without_rebuilding_controls():
         if not supported:
             pytest.skip('This Tk does not expose native macOS appearance.')
         for appearance, background in (('dark', '#181B20'), ('light', '#F6F7F9')):
-            app.root.attributes('-appearance', appearance)
+            try:
+                app.root.attributes('-appearance', appearance)
+            except tk.TclError:
+                # Tk 9.0 uses Aqua names; Tk 9.1 uses light/dark names.
+                app.root.attributes('-appearance', {'dark': 'darkaqua', 'light': 'aqua'}[appearance])
             app.root.update()
             app.theme_watcher.refresh()
             app.root.update()
