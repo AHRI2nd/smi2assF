@@ -3,6 +3,19 @@ set -euo pipefail
 
 PRODUCT_NAME="smi2assF"
 OS_CLASSIFIER="$(./os_classifier.sh)"
+MACOS_RELEASE_SIGNING="${MACOS_RELEASE_SIGNING:-0}"
+if [[ "$OS_CLASSIFIER" == osx-* && "${GITHUB_ACTIONS:-false}" == true && "$MACOS_RELEASE_SIGNING" != 1 ]]; then
+  echo "A GitHub macOS package build requires MACOS_RELEASE_SIGNING=1." >&2
+  exit 1
+fi
+if [[ "$OS_CLASSIFIER" == osx-* && "$MACOS_RELEASE_SIGNING" == 1 ]]; then
+  for SETTING in MACOS_CODESIGN_IDENTITY MACOS_EXPECTED_TEAM_ID MACOS_SIGNING_KEYCHAIN MACOS_NOTARY_PROFILE; do
+    if [[ -z "${!SETTING:-}" ]]; then
+      echo "Missing macOS release signing setting: $SETTING" >&2
+      exit 1
+    fi
+  done
+fi
 
 VENV_PYTHON=""
 if [[ "$OS_CLASSIFIER" == windows-* ]]; then
@@ -65,8 +78,13 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
   "$VENV_PYTHON" -m scripts.windows_installer_smoke "$INSTALLER_PATH"
   CHECKSUM_TARGET="$INSTALLER_PATH"
 elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
+  DMG_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.dmg"
+  rm -f "$DMG_PATH" "$DMG_PATH.sha256"
   ICON_PATH="$("$VENV_PYTHON" scripts/build_icon_path.py "$OS_CLASSIFIER")"
   PYINSTALLER_ARGS+=(--icon "$ICON_PATH")
+  if [[ "$MACOS_RELEASE_SIGNING" == 1 ]]; then
+    PYINSTALLER_ARGS+=(--codesign-identity "$MACOS_CODESIGN_IDENTITY")
+  fi
   "$VENV_PYTHON" -m PyInstaller --onedir --argv-emulation \
     --osx-bundle-identifier com.ahri2nd.smi2assf \
     "${PYINSTALLER_ARGS[@]}"
@@ -76,7 +94,9 @@ elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
   mv -f "build/gui-stage/$PRODUCT_NAME.app" "$APP_PATH"
   APP_EXECUTABLE="$APP_PATH/Contents/MacOS/$PRODUCT_NAME"
   "$APP_EXECUTABLE" --smoke-test
-  DMG_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.dmg"
+  if [[ "$MACOS_RELEASE_SIGNING" == 1 ]]; then
+    "$VENV_PYTHON" -m scripts.macos_signing app "$APP_PATH"
+  fi
   DMG_STAGE="build/gui-dmg-stage"
   rm -rf "$DMG_STAGE"
   mkdir -p "$DMG_STAGE"
@@ -87,6 +107,9 @@ elif [[ "$OS_CLASSIFIER" == osx-* ]]; then
     -ov \
     -format UDZO \
     "$DMG_PATH"
+  if [[ "$MACOS_RELEASE_SIGNING" == 1 ]]; then
+    "$VENV_PYTHON" -m scripts.macos_signing dmg "$DMG_PATH"
+  fi
   CHECKSUM_TARGET="$DMG_PATH"
 else
   echo "Unsupported GUI build target: $OS_CLASSIFIER" >&2

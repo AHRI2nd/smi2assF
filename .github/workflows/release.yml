@@ -20,7 +20,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ matrix.timeout-minutes }}
     env:
       PYTHON: python
     strategy:
@@ -31,10 +31,12 @@ jobs:
             platform: macos-arm64
             asset: smi2assF.osx-arm64.dmg
             python-version: '3.14'
+            timeout-minutes: 75
           - os: windows-latest
             platform: windows-x86_64
             asset: smi2assF.windows-x86_64.exe
             python-version: '3.13'
+            timeout-minutes: 15
     steps:
       - name: Require master branch
         shell: bash
@@ -54,13 +56,37 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
+      - name: Prepare Apple signing and notarization
+        if: ${{ runner.os == 'macOS' }}
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: python -m scripts.macos_signing prepare
+
       - name: Install dependencies
         shell: bash
         run: bash install.sh
 
       - name: Verify GUI runtime and build package
         shell: bash
+        env:
+          MACOS_RELEASE_SIGNING: ${{ runner.os == 'macOS' && '1' || '0' }}
         run: bash build.sh
+
+      - name: Preserve Apple notarization diagnostics
+        if: ${{ always() && runner.os == 'macOS' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: macos-notarization-diagnostics
+          path: build/macos-signing-logs/
+          if-no-files-found: ignore
+
+      - name: Clean up Apple signing credentials
+        if: ${{ always() && runner.os == 'macOS' }}
+        run: python -m scripts.macos_signing cleanup
 
       - name: Preserve Windows installer diagnostics
         if: ${{ always() && matrix.platform == 'windows-x86_64' }}
