@@ -11,5 +11,14 @@ def test_detect_ui_language_uses_english_for_other_device_locales():
 
 
 def test_localized_text_uses_korean_or_english_copy():
-    assert localized_text('drop_hint', 'ko') == '.smi 파일 또는 폴더를 여기에 놓으세요'
-    assert localized_text('drop_hint', 'en') == 'Drop .smi files or folders here'
+    assert localized_text('drop_hint', 'ko') == '.smi 파일을 여기에 놓으세요'
+    assert localized_text('drop_hint', 'en') == 'Drop .smi files here'
+
+
+def test_gui_result_copy_preserves_all_five_counts():
+    for language in ('ko', 'en'):
+        result = localized_text('result_summary', language, total=12, outputs=34,
+                                existing=56, failed=78, scan_errors=90)
+        for count in ('12', '34', '56', '78', '90'):
+            assert count in result
+        assert len(result.splitlines()) == 3

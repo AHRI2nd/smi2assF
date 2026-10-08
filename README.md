@@ -9,6 +9,7 @@ as a command-line interface.
 - Convert dropped subtitle files or folders immediately. Folders are searched
   recursively.
 - Show the desktop interface in Korean or English based on the device language.
+- Follow the system light or dark appearance automatically.
 - When adding a folder, search its subfolders recursively. The desktop app
   accepts files whose extension is exactly `.smi` or `.SMI`.
 - Write each `.ass` beside its source `.smi`; source files are left in place.
