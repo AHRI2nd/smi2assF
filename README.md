@@ -47,13 +47,6 @@ files and their checksums as direct downloads.
 Review the draft and publish it from the
 [Releases page](https://github.com/AHRI2nd/smi2assF/releases) when it is ready.
 
-The macOS `.dmg` opens as a disk image containing `smi2assF.app`. The release
-workflow requires Developer ID signing and Apple notarization for both the app
-and the disk image. It validates their stapled tickets and Gatekeeper acceptance
-before uploading them. Signing credentials must be configured as described below;
-missing credentials or failed notarization stop the release build.
-Windows may show a SmartScreen warning for the unsigned executable.
-
 ## Use the desktop app
 
 1. Open `smi2assF.app` on macOS. On Windows, run
@@ -136,64 +129,6 @@ The build scripts support Apple Silicon macOS and Windows x86-64. Pushes to
 both applications from `master`, runs the test suite, smoke-tests each app, and
 creates a draft release with SHA-256 checksums.
 Enable **verify_only** when validating packaging changes without creating a draft.
-
-### Apple signing for GitHub releases
-
-An Apple Developer Program membership and a **Developer ID Application**
-certificate with its private key are required. Export that identity from Keychain
-Access as a password-protected `.p12` file. An Apple Development, Apple Distribution,
-or Developer ID Installer certificate is not suitable for this app bundle.
-[Apple's Developer ID certificate guide](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/)
-explains the certificate requirements.
-
-Configure these repository Actions secrets in **Settings → Secrets and variables
-→ Actions**:
-
-| Secret | Value |
-| --- | --- |
-| `APPLE_CERTIFICATE_P12_BASE64` | Base64 encoding of the `.p12` containing the certificate and private key |
-| `APPLE_CERTIFICATE_PASSWORD` | Password used when exporting that `.p12` |
-| `APPLE_ID` | Apple Account email with access to the developer team |
-| `APPLE_TEAM_ID` | The 10-character Team ID associated with the certificate |
-| `APPLE_APP_SPECIFIC_PASSWORD` | An app-specific password generated for that Apple Account, not its account password |
-
-The certificate can be uploaded without printing its contents:
-
-```sh
-base64 -i /absolute/path/DeveloperID.p12 | gh secret set APPLE_CERTIFICATE_P12_BASE64 --repo AHRI2nd/smi2assF
-gh secret set APPLE_CERTIFICATE_PASSWORD --repo AHRI2nd/smi2assF
-gh secret set APPLE_ID --repo AHRI2nd/smi2assF
-gh secret set APPLE_TEAM_ID --repo AHRI2nd/smi2assF
-gh secret set APPLE_APP_SPECIFIC_PASSWORD --repo AHRI2nd/smi2assF
-```
-
-The last four commands prompt for their values. Certificate files, private keys,
-and passwords belong in GitHub Secrets, not source control or diagnostic artifacts.
-The app-specific password is created at [account.apple.com](https://account.apple.com/)
-under **Sign-In and Security → App-Specific Passwords**.
-
-The macOS job imports the identity into a temporary keychain, confirms its
-certificate type and Team ID, and validates the notarization credentials before
-building. PyInstaller signs the collected native binaries with a secure timestamp
-and hardened runtime. The workflow notarizes and staples the app, creates and signs
-the DMG, then notarizes and staples the DMG. It mounts the final disk image and
-checks the enclosed app's ticket, signature, Gatekeeper assessment, and startup.
-The SHA-256 checksum is generated after all signing and stapling steps.
-[PyInstaller signing documentation](https://pyinstaller.org/en/stable/feature-notes.html#macos-binary-code-signing),
-[Apple notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
-
-Each notarization wait is limited to 20 minutes, with progress output every 30
-seconds. Apple's queue can exceed that limit; in that case the job fails and the
-submission ID remains in the `macos-notarization-diagnostics` artifact. The service
-may continue processing after the local wait times out. The workflow preserves
-notary logs when available and always attempts to remove the temporary keychain.
-It never uploads the keychain or certificate as a diagnostic artifact.
-
-Use **verify_only** for the first run after configuring the secrets. This runs the
-same signed packaging checks without creating a release draft. Both macOS and
-Windows jobs must pass before publishing a release. Local `bash build.sh` builds
-remain ad-hoc signed development packages unless `MACOS_RELEASE_SIGNING=1` and
-the prepared signing environment are explicitly supplied.
 
 ## Project lineage and credits
 
