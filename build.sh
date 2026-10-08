@@ -39,7 +39,13 @@ fi
 
 "$VENV_PYTHON" -c 'import sys; raise SystemExit(sys.version_info.major != 3 or sys.version_info.minor not in (13, 14))'
 "$VENV_PYTHON" -c 'import tkinter; import tkinterdnd2'
-"$VENV_PYTHON" -m pytest -q
+if [[ "$OS_CLASSIFIER" == osx-* ]]; then
+  # Cocoa arguments affect this test process only; preserve user preferences.
+  "$VENV_PYTHON" -c 'import pytest; raise SystemExit(pytest.main(["-q"]))' \
+    -ApplePersistenceIgnoreState YES -NSQuitAlwaysKeepsWindows NO
+else
+  "$VENV_PYTHON" -m pytest -q
+fi
 
 export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-$PWD/build/pyinstaller-config}"
 mkdir -p "$PYINSTALLER_CONFIG_DIR"

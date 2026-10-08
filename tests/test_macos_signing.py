@@ -295,7 +295,10 @@ import os
 from pathlib import Path
 import sys
 arguments = sys.argv[1:]
-if arguments[:2] == ['scripts/build_icon_path.py', 'osx-arm64']:
+if arguments[:2] == ['-m', 'pytest'] or (arguments[:1] == ['-c'] and 'pytest' in arguments[1]):
+    import json
+    Path('pytest-command.json').write_text(json.dumps(arguments))
+elif arguments[:2] == ['scripts/build_icon_path.py', 'osx-arm64']:
     print('/tmp/icon.icns')
 elif arguments[:2] == ['-m', 'PyInstaller']:
     assert arguments[arguments.index('--codesign-identity') + 1] == 'A' * 40
@@ -329,6 +332,9 @@ elif arguments[:2] == ['-m', 'scripts.macos_signing']:
         'FAIL_SIGNING_STAGE': fail_stage,
     }
     result = subprocess.run(['bash', 'build.sh'], cwd=tmp_path, env=environment, capture_output=True, text=True)
+    import json
+    test_command = json.loads((tmp_path / 'pytest-command.json').read_text())
+    assert test_command[-4:] == ['-ApplePersistenceIgnoreState', 'YES', '-NSQuitAlwaysKeepsWindows', 'NO']
     order = (tmp_path / 'stage-order').read_text().splitlines()
     if fail_stage:
         assert result.returncode != 0
