@@ -25,8 +25,8 @@ import html
 import re
 import sys
 from collections import defaultdict
+from copy import deepcopy
 from dataclasses import dataclass
-from operator import itemgetter
 from pathlib import Path
 from bs4 import BeautifulSoup, NavigableString
 
@@ -246,7 +246,8 @@ class SyncEntry:
 
 SYNC_TOKEN_RE = re.compile(r'<\s*(/?)\s*sync\b[^>]*>', re.IGNORECASE)
 SYNC_OPEN_RE = re.compile(r'<\s*sync\b[^>]*>', re.IGNORECASE)
-FORMAT_TAG_RE = re.compile(r'<\s*(/?)\s*(b|i|u|s|font|rt)\b[^>]*>', re.IGNORECASE)
+PARAGRAPH_TOKEN_RE = re.compile(r'<\s*(/?)\s*(p|sync)\b[^>]*>', re.IGNORECASE)
+FORMAT_BOUNDARY_RE = re.compile(r'<\s*(/?)\s*(b|i|u|s|font|rt|p|sync)\b[^>]*>', re.IGNORECASE)
 TIMESTAMP_RE = re.compile(r'^\s*([+-]?\d+)\s*$')
 TIMESTAMP_SUFFIX_RE = re.compile(r'^\s*(\d+)([?!.,;:]+)\s*$')
 
@@ -298,6 +299,27 @@ def _repair_sync_boundaries(source, diagnostics):
     return ''.join(repaired)
 
 
+def _repair_paragraph_boundaries(source):
+    """Make optional SAMI P closings explicit before HTML parsing."""
+    repaired = []
+    cursor = 0
+    opening = None
+    for match in PARAGRAPH_TOKEN_RE.finditer(source):
+        repaired.append(source[cursor:match.start()])
+        closing, name = bool(match.group(1)), match.group(2).lower()
+        if opening is not None and (name == 'sync' or (name == 'p' and not closing)):
+            repaired.append('</p>')
+            opening = None
+        repaired.append(match.group(0))
+        if name == 'p':
+            opening = None if closing else match.start()
+        cursor = match.end()
+    repaired.append(source[cursor:])
+    if opening is not None:
+        repaired.append('</p>')
+    return ''.join(repaired)
+
+
 def _repair_formatting_tags(source, diagnostics):
     sync_matches = list(SYNC_OPEN_RE.finditer(source))
     if not sync_matches:
@@ -314,11 +336,21 @@ def _repair_formatting_tags(source, diagnostics):
         region_cursor = 0
         stack = []
 
-        for match in FORMAT_TAG_RE.finditer(region):
+        for match in FORMAT_BOUNDARY_RE.finditer(region):
             region_output.append(region[region_cursor:match.start()])
             token = match.group(0)
             closing = bool(match.group(1))
             tag_name = match.group(2).lower()
+
+            if tag_name in ('p', 'sync'):
+                while stack:
+                    unclosed_tag, opening_offset = stack.pop()
+                    region_output.append('</%s>' % unclosed_tag)
+                    _add_diagnostic(diagnostics, source, 'FORMAT_CLOSE_INSERTED', 'repair',
+                                    opening_offset, 'Closed an unclosed %s tag at a paragraph boundary.' % unclosed_tag)
+                region_output.append(token)
+                region_cursor = match.end()
+                continue
 
             if not closing and not token.rstrip().endswith('/>'):
                 stack.append((tag_name, region_start + match.start()))
@@ -425,6 +457,7 @@ def smi2ass(smi_sgml):
 def convert_smi(smi_sgml):
     diagnostics = []
     smi_sgml = _repair_sync_boundaries(smi_sgml, diagnostics)
+    smi_sgml = _repair_paragraph_boundaries(smi_sgml)
     smi_sgml = _repair_formatting_tags(smi_sgml, diagnostics)
     diagnostic_source = smi_sgml
     sync_offsets = [match.start() for match in SYNC_OPEN_RE.finditer(diagnostic_source)]
@@ -476,6 +509,10 @@ def smi2ass_internal(sln, diagnostics=None):
     diagnostics = diagnostics if diagnostics is not None else []
     ass_lines = []
     for line_idx, entry in enumerate(sln):
+        final_text = html.unescape(re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', entry.tag.get_text())).strip()
+        if line_idx + 1 == len(sln) and final_text:
+            diagnostics.append(ConversionDiagnostic('MISSING_END_TIMESTAMP', 'skip', entry.line,
+                                                    'The last text cue has no following timestamp.'))
         if line_idx + 1 < len(sln):
             item = entry.tag
             tcstart = ms2timecode(entry.timestamp)
@@ -568,6 +605,7 @@ def ms2timecode(ms):
 def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
     #prepare multilanguage dict with languages separated list
     multiLanguageDict = defaultdict(list)
+    aliases = {key.upper(): value for key, value in langCode.items()}
 
     #loop for number of smi subtitle lines
     for line_idx, subtitleLine in enumerate(smi_lines):
@@ -579,100 +617,51 @@ def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
         if timestamp is None:
             continue
 
-        language_classes = []
-        p_tag = subtitleLine.find('p')
-        if p_tag is not None:
-            language_classes = p_tag.get('class', [])
-        language = language_classes[0] if language_classes else 'unknown'
-        if not language_classes:
-            _add_diagnostic(
-                diagnostics, source, 'LANGUAGE_CLASS_MISSING', 'warning',
-                source_offset or 0,
-                'The cue has no language class; assigning it to the unknown language.',
-            )
-        entry = SyncEntry(subtitleLine, timestamp, source_line)
-        multiLanguageDict[language].append([entry, line_idx, timestamp])
+        for paragraph in subtitleLine.find_all('p'):
+            classes = paragraph.get('class', [])
+            language_class = classes[0].upper() if classes else 'UNKNOWN'
+            language = aliases.get(language_class, language_class)
+            if not classes:
+                _add_diagnostic(diagnostics, source, 'LANGUAGE_CLASS_MISSING', 'warning',
+                                source_offset or 0, 'The cue has no language class; assigning it to the unknown language.')
+            container = BeautifulSoup('', 'html.parser').new_tag('sync')
+            container.append(deepcopy(paragraph))
+            entry = SyncEntry(container, timestamp, source_line)
+            multiLanguageDict[language].append(entry)
 
-    # check whether proper multiple language subtitle
-    # if one language is less than 10% of the other language,
-    # it is likely that misuse of class name
-    # so combine or get rid of them
-
-    # get number of lines for each langauge and sort with number of lines
-    langcodes = multiLanguageDict.keys()
-    langcount=[]
-    for lang in langcodes:
-        langcount.append([lang, len(multiLanguageDict[lang])])
-    langcount = sorted(langcount, key=itemgetter(1))
-    if not langcount:
-        return defaultdict(list), []
-
-    # calculate % of each language from largest, put it in langcount
-    languageTagCheckFlag = 0
-    for index, lang in enumerate(langcount):
-        portion = float(len(multiLanguageDict[lang[0]]))/float(langcount[len(langcount)-1][1])
-        langcount[index].insert(2,float(len(multiLanguageDict[lang[0]]))/float(langcount[len(langcount)-1][1]))
-        try:
-            langName = langCode[langcount[index][0].upper()]
-            langCnvt = 1
-        except:
-            langName = langcount[index][0].upper()
-            langCnvt = 0
-        langcount[index].insert(3,langName)
-        langcount[index].insert(4,langCnvt)
-        if portion < 0.1:
-            langcount[index].insert(5,1)
-            languageTagCheckFlag = languageTagCheckFlag +1
+    separated = defaultdict(list)
+    names = []
+    used_names = set()
+    for language, entries in multiLanguageDict.items():
+        # Equal timestamps describe simultaneous text, not zero-length cues.
+        for entry in sorted(entries, key=lambda value: value.timestamp):
+            previous = separated[language][-1] if separated[language] else None
+            if previous is not None and previous.timestamp == entry.timestamp:
+                incoming = entry.tag.find('p')
+                current = previous.tag.find('p')
+                incoming_text = html.unescape(re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', incoming.get_text())).strip()
+                current_text = html.unescape(re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', current.get_text())).strip()
+                if incoming_text:
+                    if current_text:
+                        current.append(BeautifulSoup('', 'html.parser').new_tag('br'))
+                    else:
+                        current.clear()
+                    for child in list(incoming.contents):
+                        current.append(child.extract())
+            else:
+                separated[language].append(entry)
+        if len(multiLanguageDict) == 1:
+            names.append('')
         else:
-            langcount[index].insert(5,0)
-
-    # if there is a language with less than 10%, only two language exist than combine them
-    if languageTagCheckFlag > 0 and len(langcount) == 2:
-        tempml = multiLanguageDict[langcount[0][0]]
-        for tr in tempml:
-            multiLanguageDict[langcount[1][0]].append(tr)
-        del multiLanguageDict[langcount[0][0]]
-
-    # covert to real language name and merge to largest
-    elif languageTagCheckFlag > 1 :
-        for index, langc in enumerate(langcount):
-            if langc[5] == 1 and langc[4] == 1: # less than 10% and coverted to real lang name
-                toBeMergedLangName = langc[3]
-                # find largest one with same language name
-                for lg in range(len(langcount)-1,0, -1):
-                    if langcount[lg][3] == toBeMergedLangName:
-                        largestSameName = lg
-                        break
-                # merge to largest
-                tempml = multiLanguageDict[langcount[index][0]]
-                for tr in tempml:
-                    multiLanguageDict[langcount[largestSameName][0]].append(tr)
-                del multiLanguageDict[langcount[index][0]]
-            # if p language Tag is not coverted to real language name, just get rid of it.
-            elif langc[5] == 1 and langc[4] == 0:
-                del multiLanguageDict[langcount[index][0]]
-
-    #good to sort based on timecode before processing
-    multiLanguageDictSorted = defaultdict(list)
-    for lng in multiLanguageDict:
-        temp_ml = sorted(multiLanguageDict[lng], key=itemgetter(2))
-        for te in temp_ml:
-            multiLanguageDictSorted[lng].append(te[0])
-
-    #covert p tag language to long language name for ASS file name
-    longlang=[]
-    for lang in multiLanguageDictSorted:
-        if len(multiLanguageDictSorted)>1:
-            try :
-                if langCode[lang.upper()] in longlang:
-                    longlang.append(lang)
-                else:
-                    longlang.append(langCode[lang.upper()])
-            except:
-                longlang.append(lang)
-        else:
-            longlang.append('')
-    return multiLanguageDictSorted, longlang
+            base = re.sub(r'[^a-zA-Z0-9_-]', '_', language).strip('_').lower() or 'unknown'
+            name = base
+            index = 2
+            while name.casefold() in used_names:
+                name = '%s_%d' % (base, index)
+                index += 1
+            used_names.add(name.casefold())
+            names.append(name)
+    return separated, names
 
 
 def convert_smi_file(smi_path, overwrite=True):
@@ -697,17 +686,24 @@ def convert_smi_file(smi_path, overwrite=True):
     existing_outputs = tuple(
         path for path in output_data if not overwrite and path.exists()
     )
-    written_outputs = tuple(
+    pending_outputs = tuple(
         path for path in output_data if overwrite or not path.exists()
     )
-    for ass_path in written_outputs:
+    written_outputs = []
+    for ass_path in pending_outputs:
         contents = output_data[ass_path]
-        with ass_path.open('wb') as ass_file:
-            ass_file.write(contents)
+        try:
+            with ass_path.open('wb') as ass_file:
+                ass_file.write(contents)
+        except OSError as error:
+            diagnostics.append(ConversionDiagnostic('OUTPUT_WRITE_FAILED', 'skip', 1,
+                                                    'Could not write %s: %s' % (ass_path.name, error)))
+        else:
+            written_outputs.append(ass_path)
 
     return FileConversionResult(
         source=input_path,
-        outputs=written_outputs,
+        outputs=tuple(written_outputs),
         diagnostics=tuple(diagnostics),
         skipped_existing=existing_outputs,
     )
