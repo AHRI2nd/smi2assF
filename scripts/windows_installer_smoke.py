@@ -14,6 +14,40 @@ from scripts.run_with_timeout import run_with_timeout
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def existing_installation() -> bool:
+    """Refuse production installer smoke when its AppId is already registered."""
+    if sys.platform != 'win32':
+        return False
+    import winreg
+    # Read the compiler input so the guard follows changes to the actual AppId.
+    setup = (PROJECT_ROOT / 'scripts' / 'windows-installer.iss').read_text(encoding='utf-8')
+    app_id = next(line.split('=', 1)[1].strip() for line in setup.splitlines()
+                  if line.startswith('AppId='))
+    app_id = app_id.replace('{{', '{', 1)
+    key = rf'Software\Microsoft\Windows\CurrentVersion\Uninstall\{app_id}_is1'
+    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view in (winreg.KEY_WOW64_32KEY, winreg.KEY_WOW64_64KEY):
+            try:
+                with winreg.OpenKey(root, key, 0, winreg.KEY_READ | view):
+                    return True
+            except FileNotFoundError:
+                continue
+    return False
+
+
+def _validate_install_directory(install_dir: Path, workspace_root: Path) -> Path:
+    expected = workspace_root.absolute() / 'installer-smoke'
+    absolute = install_dir.absolute()
+    if absolute != expected or absolute.resolve() != absolute:
+        raise ValueError('Installation must use an unlinked verification directory')
+    # Junctions are resolved by Path.resolve; include nested links before cleanup.
+    if absolute.exists():
+        for child in absolute.rglob('*'):
+            if child.is_symlink() or (hasattr(child, 'is_junction') and child.is_junction()):
+                raise ValueError('Linked entries are not allowed in the verification directory')
+    return absolute
+
+
 def _print_diagnostics(log_dir: Path) -> None:
     for log_path in sorted(log_dir.glob('*.log')):
         print(f'[build] Diagnostics: {log_path}', flush=True)
@@ -27,12 +61,19 @@ def smoke_test_installer(
     log_dir: Path,
     *,
     runner=run_with_timeout,
+    workspace_root=PROJECT_ROOT / 'build',
+    installation_checker=None,
 ) -> int:
     installer_path = installer_path.resolve()
+    raw_install_dir = install_dir
     install_dir = install_dir.resolve()
     log_dir = log_dir.resolve()
     if log_dir.is_relative_to(install_dir):
         raise ValueError('Installer diagnostics must be outside the installation directory')
+    install_dir = _validate_install_directory(raw_install_dir, Path(workspace_root))
+    checker = installation_checker or existing_installation
+    if checker():
+        raise RuntimeError('Existing smi2assF installation detected; use a clean Windows user or VM for verification')
     if install_dir.exists():
         shutil.rmtree(install_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
