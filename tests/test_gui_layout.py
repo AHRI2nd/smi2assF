@@ -11,7 +11,7 @@ from smi2ass_gui import Smi2AssApp
 @pytest.mark.parametrize('mode', ['light', 'dark'])
 @pytest.mark.parametrize('language', ['ko', 'en'])
 @pytest.mark.parametrize('size', ['400x280', '320x260'])
-@pytest.mark.parametrize('state', ['idle', 'converting', 'done', 'failed', 'empty'])
+@pytest.mark.parametrize('state', ['idle', 'converting', 'done', 'failed', 'partial', 'empty'])
 def test_gui_layout_keeps_all_content_visible(monkeypatch, mode, language, size, state):
     monkeypatch.setattr('smi2ass_gui.detect_ui_language', lambda: language)
     app = Smi2AssApp()

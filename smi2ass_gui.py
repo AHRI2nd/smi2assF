@@ -141,8 +141,9 @@ class Smi2AssApp:
             return self._text('drop_hint'), self._text('drop_detail')
         if state == 'converting':
             return self._text('status_converting_title'), self._text('status_converting_detail', **self.state_values)
-        if state in ('done', 'failed'):
-            title = 'status_failed_title' if state == 'failed' else 'status_done_title'
+        if state in ('done', 'failed', 'partial'):
+            title = {'done': 'status_done_title', 'failed': 'status_failed_title',
+                     'partial': 'status_partial_title'}[state]
             return self._text(title), self._text('result_summary', **self.state_values)
         if state == 'scan_error':
             return self._text('status_scan_title'), self._text('status_scan_errors', **self.state_values)
@@ -258,7 +259,10 @@ class Smi2AssApp:
             summary, scan_errors = event[1], event[2]
             self.busy = False
             self.overwrite_checkbox.configure(state='normal')
-            self._set_drop_state('failed' if summary.failed or scan_errors else 'done',
+            state = 'done'
+            if summary.failed or scan_errors:
+                state = 'partial' if summary.outputs or summary.existing else 'failed'
+            self._set_drop_state(state,
                                  total=summary.total, outputs=summary.outputs,
                                  existing=summary.existing, failed=summary.failed, scan_errors=scan_errors)
 

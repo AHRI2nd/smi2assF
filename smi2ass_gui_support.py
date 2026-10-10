@@ -17,7 +17,8 @@ UI_TEXT = {
         'status_converting_title': '변환 중…',
         'status_converting_detail': '{count}개 파일을 변환하고 있어요',
         'status_done_title': '변환 완료',
-        'status_failed_title': '일부 파일을 처리하지 못했습니다',
+        'status_failed_title': '파일을 처리하지 못했습니다',
+        'status_partial_title': '일부 자막을 처리하지 못했습니다',
         'status_empty_title': '.smi 파일을 찾지 못했습니다',
         'status_scan_title': '파일을 읽지 못했습니다',
         'drop_again': '.smi 파일이나 폴더를 다시 놓으세요',
@@ -39,7 +40,8 @@ UI_TEXT = {
         'status_converting_title': 'Converting…',
         'status_converting_detail': 'Processing {count} file(s)',
         'status_done_title': 'Conversion complete',
-        'status_failed_title': 'Some files could not be processed',
+        'status_failed_title': 'Could not process files',
+        'status_partial_title': 'Some captions could not be processed',
         'status_empty_title': 'No .smi files found',
         'status_scan_title': 'Could not read files',
         'drop_again': 'Drop .smi files or folders to try again',
@@ -113,6 +115,9 @@ def convert_smi_files(paths, overwrite=False):
             continue
         outputs += len(result.outputs)
         existing += len(result.skipped_existing)
+        if (any(item.severity == 'skip' for item in result.diagnostics)
+                or not (result.outputs or result.skipped_existing)):
+            failed += 1
     return SmiConversionSummary(
         total=len(paths), outputs=outputs, existing=existing, failed=failed,
     )
