@@ -3,6 +3,7 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from smi2ass_os_language import preferred_ui_languages
 
 
 SUPPORTED_SUFFIXES = {'.smi', '.SMI'}
@@ -59,6 +60,10 @@ def detect_ui_language(device_locale=None):
     """Use Korean for Korean device locales and English for all others."""
     candidates = [device_locale] if device_locale else []
     if not candidates:
+        try:
+            candidates.extend(preferred_ui_languages())
+        except (OSError, AttributeError, ValueError):
+            pass
         message_category = getattr(locale, 'LC_MESSAGES', None)
         if message_category is not None:
             try:
@@ -73,9 +78,10 @@ def detect_ui_language(device_locale=None):
 
     for candidate in candidates:
         if candidate:
-            language = candidate.split('.', 1)[0].split('@', 1)[0]
+            language = candidate.strip().split('.', 1)[0].split('@', 1)[0]
             language = language.replace('-', '_').split('_', 1)[0].casefold()
-            return 'ko' if language == 'ko' else 'en'
+            if language:
+                return 'ko' if language in ('ko', 'korean') else 'en'
     return 'en'
 
 
