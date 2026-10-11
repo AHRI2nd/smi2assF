@@ -524,68 +524,7 @@ def smi2ass_internal(sln, diagnostics=None):
             if not p_tags:
                 continue
 
-            br = p_tags.find_all('br')
-            for gg in br:
-                gg.replace_with('\\N')
-
-            bold = p_tags.find_all('b')
-            for bo in bold:
-                if len(bo.text) != 0:
-                    boldre = '{\\b1}'+bo.text+'{\\b0}'
-                    bo.replace_with(NavigableString(boldre))
-                else:
-                    bo.extract()
-
-            italics = p_tags.find_all('i')
-            for it in italics:
-                if len(it.text) != 0:
-                    itre = '{\\i1}'+it.text+'{\\i0}'
-                    it.replace_with(NavigableString(itre))
-                else:
-                    it.extract()
-
-            underlines = p_tags.find_all('u')
-            for un in underlines:
-                if len(un.text) != 0:
-                    unre = '{\\u1}'+un.text+'{\\u0}'
-                    un.replace_with(NavigableString(unre))
-                else:
-                    un.extract()
-
-            strikes = p_tags.find_all('s')
-            for st in strikes:
-                if len(st.text) != 0:
-                    stre = '{\\s1}'+st.text+'{\\s0}'
-                    st.replace_with(NavigableString(stre))
-                else:
-                    st.extract()
-
-            ruby_tags = p_tags.find_all('rt')
-            for rt in ruby_tags:
-                if len(rt.text) != 0:
-                    rt_re = '{\\fscx50}{\\fscy50}&nbsp;'+rt.text+'&nbsp;{\\fscx100}{\\fscy100}'
-                    rt.replace_with(NavigableString(rt_re))
-                else:
-                    rt.extract()
-
-            colors = p_tags.find_all('font')
-            for color in colors:
-                col = color.get('color')
-                if col is not None:
-                    bgr_color = ass_bgr_color(col)
-                    if bgr_color is None:
-                        diagnostics.append(ConversionDiagnostic(
-                            code='UNKNOWN_COLOR',
-                            severity='warning',
-                            line=entry.line,
-                            message='Kept text with unsupported font color %r.' % col,
-                        ))
-                        color.replace_with(NavigableString(color.text))
-                    else:
-                        converted_color = '{\\c&H' + bgr_color + '&}' + color.text + '{\\c}'
-                        color.replace_with(NavigableString(converted_color))
-
-            contents = p_tags.text
+            contents = render_ass_text(p_tags, diagnostics, entry.line)
             contents = re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', contents)
             contents = html.unescape(contents)
 
@@ -594,6 +533,41 @@ def smi2ass_internal(sln, diagnostics=None):
                 ass_lines.append(line)
 
     return ass_lines
+
+
+def render_ass_text(node, diagnostics, line, styles=None):
+    """Render descendants while restoring the inherited style at each boundary."""
+    styles = {} if styles is None else styles
+    if isinstance(node, NavigableString):
+        return str(node)
+    name = node.name
+    if name == 'br':
+        return '\\N'
+    inherited = dict(styles)
+    prefix = suffix = ''
+    if name in ('b', 'i', 'u', 's'):
+        prefix = '{\\%s1}' % name
+        suffix = '{\\%s%d}' % (name, int(styles.get(name, False)))
+        inherited[name] = True
+    elif name == 'font' and node.get('color') is not None:
+        color = ass_bgr_color(node.get('color'))
+        if color is None:
+            diagnostics.append(ConversionDiagnostic('UNKNOWN_COLOR', 'warning', line,
+                                                    'Kept text with unsupported font color %r.' % node.get('color')))
+        else:
+            prefix = '{\\c&H%s&}' % color
+            parent_color = styles.get('color')
+            suffix = '{\\c&H%s&}' % parent_color if parent_color else '{\\c}'
+            inherited['color'] = color
+    elif name == 'rt':
+        prefix = '{\\fscx50}{\\fscy50}&nbsp;'
+        size = 50 if styles.get('rt') else 100
+        suffix = '&nbsp;{\\fscx%d}{\\fscy%d}' % (size, size)
+        inherited['rt'] = True
+    text = ''.join(render_ass_text(child, diagnostics, line, inherited) for child in node.children)
+    if not text:
+        return ''
+    return prefix + text + suffix
 
 
 def ms2timecode(ms):

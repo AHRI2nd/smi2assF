@@ -79,3 +79,25 @@ def test_extensionless_input_uses_its_filename_stem_in_dotted_parent(tmp_path):
     assert result.returncode == 0, result.stderr
     assert (input_directory / 'subtitle.kor.ass').exists()
     assert not (tmp_path / 'directory.kor.ass').exists()
+
+
+def formatted_caption(text):
+    outputs, _ = convert_smi('<SYNC Start=0><P Class=KRCC>' + text + '<SYNC Start=1000><P Class=KRCC>&nbsp;')
+    return outputs[''].decode('utf-8')
+
+
+def test_bold_preserves_nested_italic():
+    assert r'{\b1}A{\i1}B{\i0}C{\b0}' in formatted_caption('<b>A<i>B</i>C</b>')
+
+
+def test_nested_font_restores_outer_color():
+    assert r'{\c&H0000ff&}A{\c&Hff0000&}B{\c&H0000ff&}C{\c}' in formatted_caption('<font color=red>A<font color=blue>B</font>C</font>')
+
+
+def test_nested_same_style_restores_parent():
+    assert r'{\b1}A{\b1}B{\b1}C{\b0}' in formatted_caption('<b>A<b>B</b>C</b>')
+
+
+def test_nested_underline_strike_break_and_ruby():
+    assert r'{\u1}{\s1}A\NB{\s0}{\fscx50}{\fscy50}' in formatted_caption('<u><s>A<br>B</s><rt><i>R</i></rt></u>')
+    assert r'{\i1}R{\i0}' in formatted_caption('<u><s>A<br>B</s><rt><i>R</i></rt></u>')
