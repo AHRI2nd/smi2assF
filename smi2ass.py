@@ -672,9 +672,17 @@ def convert_smi_file(smi_path, overwrite=True, *, output_claims=None):
         smi_bytes = smi_file.read()
     smi_encoding = chardet.detect(smi_bytes)['encoding'] or 'utf-8'
 
-    with open(smi_path, 'r', encoding=smi_encoding, errors='replace') as smi_file:
-        smi_sgml = smi_file.read()
+    decoding_diagnostics = []
+    try:
+        smi_sgml = smi_bytes.decode(smi_encoding)
+    except UnicodeDecodeError as error:
+        smi_sgml = smi_bytes.decode(smi_encoding, errors='replace')
+        decoding_diagnostics.append(ConversionDiagnostic('ENCODING_REPLACEMENT', 'skip', 1,
+                                                         'Invalid input bytes replaced: %s' % error))
+    except LookupError as error:
+        raise OSError('Unsupported input encoding: %s' % smi_encoding) from error
     ass_dict, diagnostics = convert_smi(smi_sgml)
+    diagnostics[:0] = decoding_diagnostics
     input_path = Path(smi_path)
     output_stem = input_path.stem if input_path.suffix else input_path.name
     output_data = {}

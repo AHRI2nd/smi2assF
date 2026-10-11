@@ -58,3 +58,38 @@ def test_convert_smi_file_writes_missing_languages_when_one_output_exists(tmp_pa
     assert korean.is_file()
     assert '한국어' in korean.read_text(encoding='utf-8')
     assert existing.read_text(encoding='utf-8') == 'Preserve this output'
+
+
+def test_invalid_bytes_are_reported(tmp_path, monkeypatch):
+    import smi2ass
+    source = tmp_path / 'invalid.smi'
+    source.write_bytes(b'<SYNC Start=0><P Class=KRCC>bad\xff<SYNC Start=1000><P Class=KRCC>&nbsp;')
+    monkeypatch.setattr(smi2ass.chardet, 'detect', lambda data: {'encoding': 'utf-8'})
+    result = convert_smi_file(source)
+    assert any(d.code == 'ENCODING_REPLACEMENT' and d.severity == 'skip' for d in result.diagnostics)
+    assert '\ufffd' in result.outputs[0].read_text(encoding='utf-8')
+
+
+def test_input_is_read_once(tmp_path, monkeypatch):
+    import builtins
+    source = tmp_path / 'once.smi'
+    source.write_text('<SYNC Start=0><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;', encoding='utf-8')
+    original = builtins.open
+    reads = []
+    def open_file(path, *args, **kwargs):
+        if Path(path) == source:
+            reads.append(path)
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(builtins, 'open', open_file)
+    convert_smi_file(source)
+    assert len(reads) == 1
+
+
+def test_detected_encoding_is_unavailable(tmp_path, monkeypatch):
+    import pytest
+    import smi2ass
+    source = tmp_path / 'unknown.smi'
+    source.write_bytes(b'caption')
+    monkeypatch.setattr(smi2ass.chardet, 'detect', lambda data: {'encoding': 'not-an-encoding'})
+    with pytest.raises(OSError, match='encoding'):
+        convert_smi_file(source)
