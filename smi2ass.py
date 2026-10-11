@@ -22,6 +22,7 @@
 import argparse
 import chardet
 import html
+import os
 import re
 import sys
 from collections import defaultdict
@@ -29,7 +30,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from bs4 import BeautifulSoup, NavigableString
-from smi2ass_output import publish_ass
+from smi2ass_output import publish_ass, UnsafeOutputPath
 
 default_lang_code = 'kor'
 default_font_name = 'sans-serif'
@@ -665,7 +666,7 @@ def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
     return separated, names
 
 
-def convert_smi_file(smi_path, overwrite=True):
+def convert_smi_file(smi_path, overwrite=True, *, output_claims=None):
     # Open as binary and detect the encoding.
     with open(smi_path, 'rb') as smi_file:
         smi_bytes = smi_file.read()
@@ -687,10 +688,19 @@ def convert_smi_file(smi_path, overwrite=True):
     existing_outputs = []
     written_outputs = []
     for ass_path, contents in output_data.items():
+        if output_claims is not None:
+            key = os.path.normcase(os.path.abspath(ass_path))
+            owner = os.path.normcase(os.path.abspath(input_path))
+            if key in output_claims and output_claims[key] != owner:
+                diagnostics.append(ConversionDiagnostic('OUTPUT_PATH_CONFLICT', 'skip', 1,
+                                                        'Competing output: %s' % ass_path.name))
+                continue
+            output_claims[key] = owner
         try:
             outcome = publish_ass(ass_path, contents, overwrite)
         except OSError as error:
-            diagnostics.append(ConversionDiagnostic('OUTPUT_WRITE_FAILED', 'skip', 1,
+            code = 'OUTPUT_PATH_UNSAFE' if isinstance(error, UnsafeOutputPath) else 'OUTPUT_WRITE_FAILED'
+            diagnostics.append(ConversionDiagnostic(code, 'skip', 1,
                                                     'Could not write %s: %s' % (ass_path.name, error)))
         else:
             if outcome == 'existing':

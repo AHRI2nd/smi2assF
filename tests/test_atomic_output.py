@@ -70,3 +70,40 @@ def test_failed_publication_keeps_original(tmp_path, monkeypatch):
     result = smi2ass.convert_smi_file(source)
     assert target.read_bytes() == b'original subtitle'
     assert not result.outputs
+
+
+def test_directory_output_is_failure(tmp_path):
+    source, target = source_file(tmp_path)
+    target.mkdir()
+    result = smi2ass.convert_smi_file(source, overwrite=False)
+    assert not result.skipped_existing
+    assert any(d.code == 'OUTPUT_PATH_UNSAFE' for d in result.diagnostics)
+
+
+def test_link_target_is_unchanged(tmp_path):
+    import pytest
+    source, target = source_file(tmp_path)
+    victim = tmp_path / 'unrelated.txt'
+    victim.write_bytes(b'untouched')
+    try:
+        target.symlink_to(victim)
+    except OSError:
+        pytest.skip('Symlink creation privilege unavailable')
+    for overwrite in (False, True):
+        result = smi2ass.convert_smi_file(source, overwrite=overwrite)
+        assert not result.outputs and not result.skipped_existing
+        assert any(d.code == 'OUTPUT_PATH_UNSAFE' for d in result.diagnostics)
+    assert victim.read_bytes() == b'untouched'
+
+
+def test_batch_output_collision_is_reported(tmp_path, monkeypatch):
+    from smi2ass_gui_support import convert_smi_files
+    source, target = source_file(tmp_path)
+    other = tmp_path / 'other.smi'
+    other.write_bytes(source.read_bytes())
+    original = Path.with_name
+    def with_name(path, name):
+        return target if name.endswith('.ass') else original(path, name)
+    monkeypatch.setattr(Path, 'with_name', with_name)
+    summary = convert_smi_files([source, other], overwrite=True)
+    assert summary.outputs == 1 and summary.failed == 1

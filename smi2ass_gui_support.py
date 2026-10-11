@@ -105,11 +105,12 @@ def convert_smi_files(paths, overwrite=False):
     """Convert each dropped SMI file and collect a compact UI summary."""
     from smi2ass import convert_smi_file
 
+    output_claims = {}
     outputs = existing = failed = 0
     paths = tuple(paths)
     for path in paths:
         try:
-            result = convert_smi_file(path, overwrite=overwrite)
+            result = convert_smi_file(path, overwrite=overwrite, output_claims=output_claims)
         except Exception:
             failed += 1
             continue
