@@ -702,6 +702,12 @@ def convert_smi_file(smi_path, overwrite=True, *, output_claims=None):
     )
 
 
+def has_conversion_problem(result: FileConversionResult) -> bool:
+    """Use one per-file failure rule for command-line and GUI callers."""
+    return (any(item.severity == 'skip' for item in result.diagnostics)
+            or not (result.outputs or result.skipped_existing))
+
+
 def convert_file(smi_path):
     result = convert_smi_file(smi_path)
     for diagnostic in result.diagnostics:
@@ -717,7 +723,7 @@ def convert_file(smi_path):
         '%s: repaired %d, skipped %d' % (smi_path, repaired_count, skipped_count),
         file=sys.stderr,
     )
-    return skipped_count > 0
+    return has_conversion_problem(result)
 
 
 def main(argv=None):

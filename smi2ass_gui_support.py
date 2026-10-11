@@ -103,7 +103,7 @@ class SmiConversionSummary:
 
 def convert_smi_files(paths, overwrite=False):
     """Convert each dropped SMI file and collect a compact UI summary."""
-    from smi2ass import convert_smi_file
+    from smi2ass import convert_smi_file, has_conversion_problem
 
     output_claims = {}
     outputs = existing = failed = 0
@@ -116,8 +116,7 @@ def convert_smi_files(paths, overwrite=False):
             continue
         outputs += len(result.outputs)
         existing += len(result.skipped_existing)
-        if (any(item.severity == 'skip' for item in result.diagnostics)
-                or not (result.outputs or result.skipped_existing)):
+        if has_conversion_problem(result):
             failed += 1
     return SmiConversionSummary(
         total=len(paths), outputs=outputs, existing=existing, failed=failed,

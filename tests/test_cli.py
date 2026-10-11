@@ -57,3 +57,20 @@ def test_cli_requires_at_least_one_input_file(tmp_path):
 
     assert result.returncode == 2
     assert 'usage:' in result.stderr
+
+
+def test_all_blank_input_fails_cli_and_gui(tmp_path):
+    from smi2ass_gui_support import convert_smi_files
+    source = tmp_path / 'blank.smi'
+    source.write_text('<SYNC Start=0><P Class=KRCC>&nbsp;<SYNC Start=1000><P Class=KRCC>&nbsp;')
+    assert convert_smi_files([source]).failed == 1
+    result = run_cli(source, cwd=tmp_path)
+    assert result.returncode == 1
+
+
+def test_partial_output_is_nonzero_cli(tmp_path):
+    source = tmp_path / 'partial.smi'
+    source.write_text('<SYNC Start=0><P Class=KRCC>Too short<SYNC Start=1><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;')
+    result = run_cli(source, cwd=tmp_path)
+    assert result.returncode == 1
+    assert 'Keep' in (tmp_path / 'partial.kor.ass').read_text()
