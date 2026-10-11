@@ -529,6 +529,10 @@ def smi2ass_internal(sln, diagnostics=None):
             contents = html.unescape(contents)
 
             if len(contents.strip()) != 0:
+                if (sln[line_idx+1].timestamp + 5) // 10 <= (entry.timestamp + 5) // 10:
+                    diagnostics.append(ConversionDiagnostic('ZERO_DURATION_CUE', 'skip', entry.line,
+                                                            'Cue duration vanishes at ASS centisecond precision.'))
+                    continue
                 line = 'Dialogue: 0,%s,%s,Default,,0000,0000,0000,,%s\n' % (tcstart,tcend, contents)
                 ass_lines.append(line)
 

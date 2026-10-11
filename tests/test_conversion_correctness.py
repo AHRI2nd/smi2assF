@@ -101,3 +101,16 @@ def test_nested_same_style_restores_parent():
 def test_nested_underline_strike_break_and_ruby():
     assert r'{\u1}{\s1}A\NB{\s0}{\fscx50}{\fscy50}' in formatted_caption('<u><s>A<br>B</s><rt><i>R</i></rt></u>')
     assert r'{\i1}R{\i0}' in formatted_caption('<u><s>A<br>B</s><rt><i>R</i></rt></u>')
+
+
+@pytest.mark.parametrize('end', [1, 4])
+def test_quantized_zero_duration_is_skipped(end):
+    outputs, diagnostics = convert_smi('<SYNC Start=0><P Class=KRCC>Too short<SYNC Start=%d><P Class=KRCC>&nbsp;' % end)
+    assert not any(b'Dialogue:' in output for output in outputs.values())
+    assert any(d.code == 'ZERO_DURATION_CUE' and d.severity == 'skip' for d in diagnostics)
+
+
+def test_centisecond_boundary_remains_valid():
+    outputs, diagnostics = convert_smi('<SYNC Start=4><P Class=KRCC>Visible<SYNC Start=5><P Class=KRCC>&nbsp;')
+    assert 'Dialogue: 0,0:00:00.00,0:00:00.01,' in outputs[''].decode()
+    assert not any(d.code == 'ZERO_DURATION_CUE' for d in diagnostics)
