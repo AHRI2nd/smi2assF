@@ -6,7 +6,7 @@ from pathlib import Path
 from smi2ass_os_language import preferred_ui_languages
 
 
-SUPPORTED_SUFFIXES = {'.smi', '.SMI'}
+SUPPORTED_SUFFIXES = {'.smi'}
 
 UI_TEXT = {
     'ko': {
@@ -133,30 +133,34 @@ class SmiScanResult:
 def scan_smi_files(paths):
     found = {}
     errors = []
-    for raw_path in paths:
-        path = Path(raw_path).expanduser()
+    def add_candidate(candidate):
+        if candidate.suffix.casefold() not in SUPPORTED_SUFFIXES:
+            return
         try:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_file():
+                raise OSError('Input is not a regular file')
+        except (OSError, RuntimeError) as error:
+            errors.append((candidate, error))
+            return
+        found[os.path.normcase(str(resolved))] = resolved
+
+    for raw_path in paths:
+        path = Path(raw_path)
+        try:
+            path = path.expanduser()
             mode = path.stat().st_mode
-        except FileNotFoundError:
-            continue
-        except OSError as error:
+        except (OSError, RuntimeError) as error:
             errors.append((path, error))
             continue
-
         if stat.S_ISDIR(mode):
             def on_walk_error(error, root=path):
                 errors.append((Path(error.filename or root), error))
-
             for directory, _, filenames in os.walk(path, onerror=on_walk_error):
                 for filename in filenames:
-                    candidate = Path(directory) / filename
-                    if candidate.suffix in SUPPORTED_SUFFIXES:
-                        resolved = candidate.resolve()
-                        found[os.path.normcase(str(resolved))] = resolved
-        elif stat.S_ISREG(mode) and path.suffix in SUPPORTED_SUFFIXES:
-            candidate = path
-            resolved = candidate.resolve()
-            found[os.path.normcase(str(resolved))] = resolved
+                    add_candidate(Path(directory) / filename)
+        elif stat.S_ISREG(mode):
+            add_candidate(path)
 
     return SmiScanResult(
         files=tuple(sorted(found.values(), key=lambda item: str(item).casefold())),

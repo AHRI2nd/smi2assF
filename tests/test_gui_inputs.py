@@ -17,7 +17,7 @@ def test_collect_smi_files_finds_only_smi_extensions_recursively(tmp_path):
 
     result = collect_smi_files([root])
 
-    expected = sorted([lower.resolve(), upper.resolve()], key=lambda path: str(path).casefold())
+    expected = sorted([lower.resolve(), upper.resolve(), mixed_case.resolve()], key=lambda path: str(path).casefold())
     assert result == expected
 
 
@@ -49,3 +49,19 @@ def test_scan_smi_files_reports_directory_walk_errors(tmp_path, monkeypatch):
 
     assert result.files == (source.resolve(),)
     assert result.errors == ((root, denied),)
+
+
+def test_missing_input_is_reported(tmp_path):
+    result = scan_smi_files([tmp_path / 'missing.smi'])
+    assert len(result.errors) == 1
+    assert isinstance(result.errors[0][1], FileNotFoundError)
+
+
+def test_resolve_failure_is_collected(tmp_path, monkeypatch):
+    source = tmp_path / 'source.smi'
+    source.write_text('fixture')
+    def resolve(path, *args, **kwargs):
+        raise OSError('too many symbolic links')
+    monkeypatch.setattr(Path, 'resolve', resolve)
+    result = scan_smi_files([source])
+    assert not result.files and len(result.errors) == 1
