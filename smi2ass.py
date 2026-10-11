@@ -29,6 +29,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from bs4 import BeautifulSoup, NavigableString
+from smi2ass_output import publish_ass
 
 default_lang_code = 'kor'
 default_font_name = 'sans-serif'
@@ -683,29 +684,25 @@ def convert_smi_file(smi_path, overwrite=True):
         )
         output_data[ass_path] = contents
 
-    existing_outputs = tuple(
-        path for path in output_data if not overwrite and path.exists()
-    )
-    pending_outputs = tuple(
-        path for path in output_data if overwrite or not path.exists()
-    )
+    existing_outputs = []
     written_outputs = []
-    for ass_path in pending_outputs:
-        contents = output_data[ass_path]
+    for ass_path, contents in output_data.items():
         try:
-            with ass_path.open('wb') as ass_file:
-                ass_file.write(contents)
+            outcome = publish_ass(ass_path, contents, overwrite)
         except OSError as error:
             diagnostics.append(ConversionDiagnostic('OUTPUT_WRITE_FAILED', 'skip', 1,
                                                     'Could not write %s: %s' % (ass_path.name, error)))
         else:
-            written_outputs.append(ass_path)
+            if outcome == 'existing':
+                existing_outputs.append(ass_path)
+            else:
+                written_outputs.append(ass_path)
 
     return FileConversionResult(
         source=input_path,
         outputs=tuple(written_outputs),
         diagnostics=tuple(diagnostics),
-        skipped_existing=existing_outputs,
+        skipped_existing=tuple(existing_outputs),
     )
 
 

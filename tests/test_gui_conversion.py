@@ -79,30 +79,32 @@ def test_unreadable_input_does_not_stop_other_files(tmp_path):
 
 
 def test_output_write_failure_is_counted(tmp_path, monkeypatch):
+    import smi2ass
     from pathlib import Path
-    original = Path.open
-    def open_path(self, *args, **kwargs):
-        if self.suffix == '.ass':
+    original = smi2ass.publish_ass
+    def publish(dst, contents, overwrite):
+        if Path(dst).suffix == '.ass':
             raise PermissionError('read-only output')
-        return original(self, *args, **kwargs)
+        return original(dst, contents, overwrite)
     source = tmp_path / 'source.smi'
     source.write_text('<SYNC Start=0><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;', encoding='utf-8')
-    monkeypatch.setattr(Path, 'open', open_path)
+    monkeypatch.setattr(smi2ass, 'publish_ass', publish)
     summary = convert_smi_files([source])
     assert summary.outputs == 0 and summary.failed == 1
 
 
 def test_later_language_write_failure_preserves_successful_output_count(tmp_path, monkeypatch):
+    import smi2ass
     from pathlib import Path
-    original = Path.open
-    def open_path(self, *args, **kwargs):
-        if self.name == 'multi.eng.ass':
+    original = smi2ass.publish_ass
+    def publish(dst, contents, overwrite):
+        if Path(dst).name == 'multi.eng.ass':
             raise PermissionError('English output unavailable')
-        return original(self, *args, **kwargs)
+        return original(dst, contents, overwrite)
     source = tmp_path / 'multi.smi'
     source.write_text('<SYNC Start=0><P Class=KRCC>한국어</P><P Class=ENCC>English</P>'
                       '<SYNC Start=1000><P Class=KRCC>&nbsp;</P><P Class=ENCC>&nbsp;</P>', encoding='utf-8')
-    monkeypatch.setattr(Path, 'open', open_path)
+    monkeypatch.setattr(smi2ass, 'publish_ass', publish)
     summary = convert_smi_files([source])
     assert summary.outputs == 1
     assert summary.failed == 1
