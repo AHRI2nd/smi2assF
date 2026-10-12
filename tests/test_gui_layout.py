@@ -77,6 +77,7 @@ def test_gui_layout_expands_minimum_for_large_font():
         assert isinstance(app.drop_zone, tk.Canvas)
         app.title_font.configure(size=26)
         app.detail_font.configure(size=22)
+        app._set_drop_state('done', total=99999, outputs=88888, existing=77777, failed=0, scan_errors=0)
         app._update_minimum_size()
         width, height = app.root.minsize()
         assert height > 260
@@ -86,3 +87,33 @@ def test_gui_layout_expands_minimum_for_large_font():
         assert app.drop_zone.bbox('content')[3] < app.drop_zone.winfo_height()
     finally:
         app.root.destroy()
+
+
+@pytest.mark.parametrize('scale', [1, 1.5, 2])
+@pytest.mark.parametrize('language', ['ko', 'en'])
+@pytest.mark.parametrize('mode', ['light', 'dark'])
+@pytest.mark.parametrize('count', [99999, 1000000])
+def test_actual_result_fits_scaled_fonts(monkeypatch, scale, language, mode, count):
+    monkeypatch.setattr('smi2ass_gui.detect_ui_language', lambda: language)
+    app = Smi2AssApp()
+    original_scale = float(app.root.tk.call('tk', 'scaling'))
+    try:
+        app.root.tk.call('tk', 'scaling', original_scale * scale)
+        app.title_font.configure(size=14)
+        app.detail_font.configure(size=11)
+        app._apply_theme(mode)
+        app._set_drop_state('partial', total=count, outputs=count, existing=count,
+                            failed=count, scan_errors=count)
+        app._update_minimum_size()
+        width, height = app.root.minsize()
+        app.root.geometry(f'{width}x{height}')
+        app.root.update()
+        left, top, right, bottom = app.drop_zone.bbox('content')
+        assert left >= 12 and top >= 12
+        assert right <= app.drop_zone.winfo_width() - 12
+        assert bottom <= app.drop_zone.winfo_height() - 12
+        option = app.overwrite_checkbox
+        assert option.winfo_y() + option.winfo_height() <= option.master.winfo_height()
+    finally:
+        app.root.tk.call('tk', 'scaling', original_scale)
+        app._dispose()

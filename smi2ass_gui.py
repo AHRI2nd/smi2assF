@@ -87,20 +87,22 @@ class Smi2AssApp:
         self._queue_redraw()
 
     def _update_minimum_size(self):
-        # Reserve three result lines and two title lines even at larger font sizes.
-        content_height = (28 + 18 + 2 * self.title_font.metrics('linespace')
-                          + 3 * self.detail_font.metrics('linespace') + 24)
-        height = content_height + self.overwrite_checkbox.winfo_reqheight() + 44
-        # Normal typography fits the compact window; larger accessibility fonts grow it.
-        normal_height = (28 + 18 + self.title_font.metrics('linespace')
-                         + 3 * self.detail_font.metrics('linespace') + 24
-                         + self.overwrite_checkbox.winfo_reqheight() + 44)
-        reserve = height if self.title_font.actual('size') > 18 else normal_height
-        result_width = max(self.detail_font.measure(line) for line in self._text(
-            'result_summary', total=99999, outputs=99999, existing=99999, failed=99999, scan_errors=99999,
-        ).splitlines())
-        self.root.minsize(max(320, result_width + 72, self.overwrite_checkbox.winfo_reqwidth() + 32),
-                          max(260, reserve))
+        # Measure actual Tk wrapping, including large counts and accessibility fonts.
+        title, detail = self._state_copy()
+        width = max(320, self.overwrite_checkbox.winfo_reqwidth() + 32,
+                    max((self.detail_font.measure(line) for line in detail.splitlines()), default=0) + 72)
+        heights = []
+        for text, text_font in ((title, self.title_font), (detail, self.detail_font)):
+            item = self.drop_zone.create_text(0, 0, text=text, font=text_font,
+                                             width=max(40, width - 72), anchor='n', justify='center')
+            bounds = self.drop_zone.bbox(item)
+            heights.append(bounds[3] - bounds[1] if bounds else 0)
+            self.drop_zone.delete(item)
+        content_height = 40 + heights[0] + 6 + heights[1] + 24
+        minimum = (width, max(260, content_height + self.overwrite_checkbox.winfo_reqheight() + 44))
+        if minimum != getattr(self, '_minimum', None):
+            self._minimum = minimum
+            self.root.minsize(*minimum)
 
     def _apply_theme(self, mode):
         self.theme_mode = mode
@@ -131,6 +133,7 @@ class Smi2AssApp:
     def _set_drop_state(self, state, **values):
         self.drop_state = state
         self.state_values = values
+        self._update_minimum_size()
         self._queue_redraw()
 
     def _state_copy(self):
@@ -155,6 +158,9 @@ class Smi2AssApp:
 
     def _render_drop_state(self):
         self._redraw_id = None
+        if self._disposed:
+            return
+        self._update_minimum_size()
         canvas = self.drop_zone
         width, height = canvas.winfo_width(), canvas.winfo_height()
         if self._disposed or width < 30 or height < 30:
