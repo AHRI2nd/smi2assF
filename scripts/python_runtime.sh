@@ -19,6 +19,8 @@ verify_python_version() {
   local executable="$1"
   local actual
   actual="$("$executable" -c 'import sys; print("%d.%d" % sys.version_info[:2])')" || return 1
+  # Native Windows stdout can retain CR after Bash removes the final LF.
+  actual="${actual%$'\r'}"
   if [[ "$actual" != "$REQUESTED_PYTHON_VERSION" ]]; then
     echo "Requested Python $REQUESTED_PYTHON_VERSION, found $actual at $executable." >&2
     return 1

@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def build_preflight(tmp_path, versions, requested):
+def build_preflight(tmp_path, versions, requested, *, report_crlf=False):
     shutil.copy(ROOT / 'build.sh', tmp_path / 'build.sh')
     helper = ROOT / 'scripts/python_runtime.sh'
     if helper.exists():
@@ -23,7 +23,7 @@ def build_preflight(tmp_path, versions, requested):
         executable.parent.mkdir(parents=True)
         executable.write_text('#!/usr/bin/env bash\n'
                               'if [[ "$1" == "-c" && "$2" == *sys.version_info* ]]; then\n'
-                              'echo ' + actual + '; exit 0; fi\n'
+                              + ("printf '%s\\r\\n' " if report_crlf else 'echo ') + actual + '; exit 0; fi\n'
                               'echo SELECTED=' + actual + '\nexit 91\n')
         executable.chmod(0o755)
     native_bash = Path(r'C:\Program Files\Git\bin\bash.exe')
@@ -83,3 +83,8 @@ def test_prepare_rejects_wrong_runtime_before_creating_venv(tmp_path):
     assert result.returncode != 0
     assert 'Requested Python 3.14, found 3.13' in result.stderr
     assert not (tmp_path / 'build').exists()
+
+
+def test_native_windows_crlf_version_report_is_accepted(tmp_path):
+    result = build_preflight(tmp_path, {'314': '3.14'}, '3.14', report_crlf=True)
+    assert 'SELECTED=3.14' in result.stdout
