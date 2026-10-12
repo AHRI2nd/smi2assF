@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import getpass
+import os
+import tempfile
 import shutil
 import sys
 import time
@@ -55,7 +59,55 @@ def _print_diagnostics(log_dir: Path) -> None:
         print('\n'.join(lines[-80:]), flush=True)
 
 
-def smoke_test_installer(
+@contextmanager
+def _verification_lock():
+    """Refuse overlapping production-AppId smoke runs across workspaces."""
+    if sys.platform == 'win32':
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+        kernel.CreateMutexW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel.ReleaseMutex.argtypes = (wintypes.HANDLE,)
+        name = 'Global\\smi2assFInstallerSmoke-' + getpass.getuser().casefold()
+        handle = kernel.CreateMutexW(None, True, name)
+        error = ctypes.get_last_error()
+        if not handle:
+            raise OSError(error, 'Could not acquire installer verification mutex')
+        if error == 183:
+            kernel.CloseHandle(handle)
+            raise RuntimeError('Installer verification already in progress')
+        try:
+            yield
+        finally:
+            kernel.ReleaseMutex(handle)
+            kernel.CloseHandle(handle)
+    else:
+        import fcntl
+        path = Path(tempfile.gettempdir()) / ('smi2assF-installer-smoke-%d.lock' % os.getuid())
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'a+b') as stream:
+            if os.fstat(stream.fileno()).st_uid != os.getuid():
+                raise RuntimeError('Installer verification lock has an unexpected owner')
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise RuntimeError('Installer verification already in progress') from error
+            try:
+                yield
+            finally:
+                fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def smoke_test_installer(installer_path, install_dir, log_dir, *, runner=run_with_timeout,
+                         workspace_root=PROJECT_ROOT / 'build', installation_checker=None):
+    with _verification_lock():
+        return _smoke_test_installer(installer_path, install_dir, log_dir, runner=runner,
+                                     workspace_root=workspace_root, installation_checker=installation_checker)
+
+
+def _smoke_test_installer(
     installer_path: Path,
     install_dir: Path,
     log_dir: Path,
@@ -82,8 +134,12 @@ def smoke_test_installer(
 
     print(f'[build] Installer diagnostics directory: {log_dir}', flush=True)
     result = 1
+    installation_started = False
+    uninstall_attempted = False
+    uninstall_path = install_dir / 'unins000.exe'
     try:
         # Construct slash-prefixed Inno options after crossing the Git Bash boundary.
+        installation_started = True
         result = runner([
             str(installer_path), '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
             f'/LOG={log_dir / "install.log"}', f'/DIR={install_dir}',
@@ -101,6 +157,7 @@ def smoke_test_installer(
         result = runner([str(app_path), '--smoke-test'], 60, 'installed app smoke')
         if result:
             return result
+        uninstall_attempted = True
         result = runner([
             str(uninstall_path), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
             f'/LOG={log_dir / "uninstall.log"}',
@@ -119,8 +176,27 @@ def smoke_test_installer(
         print('[build] DONE Windows installer lifecycle: install, app smoke, uninstall', flush=True)
         return 0
     finally:
+        if installation_started and not uninstall_attempted and uninstall_path.is_file():
+            try:
+                _validate_install_directory(install_dir, Path(workspace_root))
+                cleanup_result = runner([
+                    str(uninstall_path), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+                    f'/LOG={log_dir / "uninstall.log"}',
+                ], 60, 'uninstall')
+                deadline = time.monotonic() + 10
+                while not cleanup_result and install_dir.exists() and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                if cleanup_result or install_dir.exists():
+                    print(f'[build] FAILED installer cleanup (exit code: {cleanup_result}); primary failure: {result}', flush=True)
+            except Exception as error:
+                print(f'[build] FAILED installer cleanup: {error}; primary failure: {result}', flush=True)
+        elif installation_started and not uninstall_attempted and install_dir.exists():
+            print('[build] FAILED installer cleanup: owned uninstaller is unavailable', flush=True)
         if result:
-            _print_diagnostics(log_dir)
+            try:
+                _print_diagnostics(log_dir)
+            except OSError as error:
+                print(f'[build] Could not read installer diagnostics: {error}', flush=True)
 
 
 def main() -> int:

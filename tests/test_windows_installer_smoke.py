@@ -168,3 +168,72 @@ def test_registry_query_failure_is_not_treated_as_absent(monkeypatch):
     monkeypatch.setattr(smoke.sys, 'platform', 'win32')
     with pytest.raises(PermissionError):
         smoke.existing_installation()
+
+
+@pytest.mark.parametrize('install_code, app_code, cleanup_code', [(0, 7, 0), (124, 0, 0), (0, 7, 9)])
+def test_failed_installation_runs_owned_cleanup_and_preserves_error(tmp_path, capsys, install_code, app_code, cleanup_code):
+    from scripts.windows_installer_smoke import smoke_test_installer
+    directory = tmp_path / 'installer-smoke'
+    labels = []
+    def run(command, timeout, label):
+        labels.append(label)
+        if label == 'installer install':
+            directory.mkdir()
+            (directory / 'smi2assF.exe').write_bytes(b'app')
+            (directory / 'unins000.exe').write_bytes(b'uninstaller')
+            return install_code
+        if label == 'installed app smoke':
+            return app_code
+        if label == 'uninstall':
+            if not cleanup_code:
+                shutil.rmtree(directory)
+            return cleanup_code
+        raise AssertionError(label)
+    result = smoke_test_installer(tmp_path / 'installer.exe', directory, tmp_path / 'logs',
+                                  runner=run, workspace_root=tmp_path, installation_checker=lambda: False)
+    assert result == (install_code or app_code)
+    assert labels[-1] == 'uninstall'
+    if cleanup_code:
+        assert 'cleanup' in capsys.readouterr().out.lower()
+    else:
+        assert not directory.exists()
+
+
+def test_concurrent_installer_smoke_is_refused(tmp_path):
+    from scripts.windows_installer_smoke import smoke_test_installer
+    def run(command, timeout, label):
+        with pytest.raises(RuntimeError, match='in progress'):
+            smoke_test_installer(tmp_path / 'other.exe', tmp_path / 'other' / 'installer-smoke', tmp_path / 'other-logs',
+                                 runner=lambda *args: pytest.fail('Concurrent install executed'),
+                                 workspace_root=tmp_path / 'other', installation_checker=lambda: False)
+        return 124
+    assert smoke_test_installer(tmp_path / 'installer.exe', tmp_path / 'installer-smoke', tmp_path / 'logs',
+                                runner=run, workspace_root=tmp_path, installation_checker=lambda: False) == 124
+
+
+@pytest.mark.parametrize('existing', [False, True])
+def test_windows_mutex_is_exclusive_and_always_closed(monkeypatch, existing):
+    import ctypes
+    from scripts import windows_installer_smoke as smoke
+    calls = []
+    def create(security, owner, name):
+        assert owner and name.startswith('Global\\smi2assFInstallerSmoke-')
+        return 42
+    def release(handle):
+        calls.append(('release', handle))
+    def close(handle):
+        calls.append(('close', handle))
+    kernel = SimpleNamespace(CreateMutexW=create, ReleaseMutex=release, CloseHandle=close)
+    monkeypatch.setattr(ctypes, 'WinDLL', lambda *args, **kwargs: kernel, raising=False)
+    monkeypatch.setattr(ctypes, 'get_last_error', lambda: 183 if existing else 0, raising=False)
+    monkeypatch.setattr(smoke.sys, 'platform', 'win32')
+    if existing:
+        with pytest.raises(RuntimeError, match='in progress'):
+            with smoke._verification_lock():
+                pytest.fail('Acquired an existing mutex')
+        assert calls == [('close', 42)]
+    else:
+        with pytest.raises(ValueError):
+            with smoke._verification_lock():
+                raise ValueError('primary error')
+        assert calls == [('release', 42), ('close', 42)]
