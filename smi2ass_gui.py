@@ -98,7 +98,8 @@ class Smi2AssApp:
             bounds = self.drop_zone.bbox(item)
             heights.append(bounds[3] - bounds[1] if bounds else 0)
             self.drop_zone.delete(item)
-        content_height = 40 + heights[0] + 6 + heights[1] + 24
+        # Tk line bounding boxes extend two pixels beyond the icon on Win/X11.
+        content_height = 40 + heights[0] + 6 + heights[1] + 28
         minimum = (width, max(260, content_height + self.overwrite_checkbox.winfo_reqheight() + 44))
         if minimum != getattr(self, '_minimum', None):
             self._minimum = minimum
@@ -188,7 +189,7 @@ class Smi2AssApp:
         title_box, detail_box = canvas.bbox(title_id), canvas.bbox(detail_id)
         title_height, detail_height = title_box[3]-title_box[1], detail_box[3]-detail_box[1]
         group_height = 28 + 12 + title_height + 6 + detail_height
-        top = max(12, (height-group_height)/2)
+        top = max(14, (height-group_height)/2)
         self._draw_file_icon(width/2 - 11, top, colors['accent'])
         canvas.coords(title_id, width/2, top+40)
         canvas.coords(detail_id, width/2, top+40+title_height+6)
