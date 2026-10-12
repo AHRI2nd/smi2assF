@@ -4,7 +4,7 @@ select_python_version() {
   local classifier="$1"
   local default_version=3.14
   if [[ "$classifier" == windows-* ]]; then
-    default_version=3.13
+    default_version=3.14
   fi
   REQUESTED_PYTHON_VERSION="${BUILD_PYTHON_VERSION:-$default_version}"
   if [[ "$REQUESTED_PYTHON_VERSION" != 3.13 && "$REQUESTED_PYTHON_VERSION" != 3.14 ]]; then

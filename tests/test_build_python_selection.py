@@ -59,10 +59,10 @@ def test_unsupported_requested_runtime_is_rejected(tmp_path):
     assert 'BUILD_PYTHON_VERSION must be 3.13 or 3.14' in result.stderr
 
 
-def test_default_windows_runtime_remains_313(tmp_path):
+def test_default_windows_runtime_uses_verified_314(tmp_path):
     result = build_preflight(tmp_path, {'313': '3.13', '314': '3.14'}, '')
-    assert 'SELECTED=3.13' in result.stdout
-    assert 'SELECTED=3.14' not in result.stdout
+    assert 'SELECTED=3.14' in result.stdout
+    assert 'SELECTED=3.13' not in result.stdout
 
 
 def test_prepare_rejects_wrong_runtime_before_creating_venv(tmp_path):
@@ -88,3 +88,9 @@ def test_prepare_rejects_wrong_runtime_before_creating_venv(tmp_path):
 def test_native_windows_crlf_version_report_is_accepted(tmp_path):
     result = build_preflight(tmp_path, {'314': '3.14'}, '3.14', report_crlf=True)
     assert 'SELECTED=3.14' in result.stdout
+
+
+def test_explicit_313_rollback_remains_available(tmp_path):
+    result = build_preflight(tmp_path, {'313': '3.13', '314': '3.14'}, '3.13')
+    assert 'SELECTED=3.13' in result.stdout
+    assert 'SELECTED=3.14' not in result.stdout
