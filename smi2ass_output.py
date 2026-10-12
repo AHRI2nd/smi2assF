@@ -13,15 +13,18 @@ def validate_output(path: Path):
     try:
         mode = path.lstat().st_mode
     except FileNotFoundError:
-        return
+        return False
     if not stat.S_ISREG(mode) or path.is_symlink() or path.is_junction():
         raise UnsafeOutputPath('Unsafe output entry: %s' % path)
+    return True
 
 
 def publish_ass(path: Path, contents: bytes, overwrite: bool) -> str:
     """Stage beside the destination, then atomically publish complete bytes."""
-    validate_output(path)
-    fd, name = tempfile.mkstemp(prefix='.' + path.name + '.', suffix='.tmp', dir=path.parent)
+    exists = validate_output(path)
+    if exists and not overwrite:
+        return 'existing'
+    fd, name = tempfile.mkstemp(prefix='.smi2ass-', suffix='.tmp', dir=path.parent)
     temporary = Path(name)
     try:
         with os.fdopen(fd, 'wb') as stream:

@@ -107,3 +107,68 @@ def test_batch_output_collision_is_reported(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, 'with_name', with_name)
     summary = convert_smi_files([source, other], overwrite=True)
     assert summary.outputs == 1 and summary.failed == 1
+
+
+def test_preserved_output_does_not_need_writable_directory(tmp_path, monkeypatch):
+    import tempfile
+    source, target = source_file(tmp_path)
+    target.write_bytes(b'preserved output')
+    def denied(*args, **kwargs):
+        raise PermissionError('Cannot create files in this directory')
+    monkeypatch.setattr(tempfile, 'mkstemp', denied)
+    result = smi2ass.convert_smi_file(source, overwrite=False)
+    assert result.skipped_existing == (target,)
+    assert not result.outputs
+    assert not any(d.severity == 'skip' for d in result.diagnostics)
+    assert target.read_bytes() == b'preserved output'
+
+
+def test_actual_partial_staging_failure_keeps_original(tmp_path, monkeypatch):
+    source, target = source_file(tmp_path)
+    target.write_bytes(b'original subtitle')
+    original = os.fdopen
+    class BrokenStream:
+        def __init__(self, stream):
+            self.stream = stream
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.stream.close()
+        def write(self, contents):
+            self.stream.write(contents[:17])
+            raise OSError(errno.ENOSPC, 'disk full during write')
+    monkeypatch.setattr(os, 'fdopen', lambda *args: BrokenStream(original(*args)))
+    result = smi2ass.convert_smi_file(source)
+    assert target.read_bytes() == b'original subtitle'
+    assert not result.outputs
+    assert any(d.code == 'OUTPUT_WRITE_FAILED' for d in result.diagnostics)
+    assert len(list(tmp_path.iterdir())) == 2
+
+
+def test_unsupported_no_replace_publication_fails_safely(tmp_path, monkeypatch):
+    source, target = source_file(tmp_path)
+    operation = 'rename' if os.name == 'nt' else 'link'
+    def unsupported(*args):
+        raise OSError(errno.ENOTSUP, 'No atomic publication on this volume')
+    monkeypatch.setattr(os, operation, unsupported)
+    result = smi2ass.convert_smi_file(source, overwrite=False)
+    assert not target.exists()
+    assert not result.outputs and not result.skipped_existing
+    assert any(d.code == 'OUTPUT_WRITE_FAILED' for d in result.diagnostics)
+    assert list(tmp_path.iterdir()) == [source]
+
+
+def test_valid_long_filename_can_be_published(tmp_path):
+    import pytest
+    source = tmp_path / ('a' * 240 + '.smi')
+    target = source.with_suffix('.kor.ass')
+    try:
+        source.write_text('<SYNC Start=0><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;', encoding='utf-8')
+        target.write_bytes(b'original')
+    except OSError as error:
+        if error.errno == errno.ENAMETOOLONG or getattr(error, 'winerror', None) == 206:
+            pytest.skip('Filesystem does not support this valid long input/output path')
+        raise
+    result = smi2ass.convert_smi_file(source)
+    assert result.outputs == (target,)
+    assert b'Keep' in target.read_bytes()
