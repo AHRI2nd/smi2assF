@@ -708,8 +708,8 @@ def has_conversion_problem(result: FileConversionResult) -> bool:
             or not (result.outputs or result.skipped_existing))
 
 
-def convert_file(smi_path):
-    result = convert_smi_file(smi_path)
+def convert_file(smi_path, *, output_claims=None):
+    result = convert_smi_file(smi_path, output_claims=output_claims)
     for diagnostic in result.diagnostics:
         print(
             '%s:%d: [%s] %s' % (
@@ -734,9 +734,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     failed = False
+    output_claims = {}
     for smi_path in args.files:
         try:
-            failed = convert_file(smi_path) or failed
+            failed = convert_file(smi_path, output_claims=output_claims) or failed
         except OSError as error:
             print('%s: error: %s' % (smi_path, error), file=sys.stderr)
             failed = True

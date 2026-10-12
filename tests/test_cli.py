@@ -74,3 +74,15 @@ def test_partial_output_is_nonzero_cli(tmp_path):
     result = run_cli(source, cwd=tmp_path)
     assert result.returncode == 1
     assert 'Keep' in (tmp_path / 'partial.kor.ass').read_text()
+
+
+def test_cli_batch_output_collision_preserves_first_input(tmp_path):
+    first = tmp_path / 'episode.smi'
+    second = tmp_path / 'episode.txt'
+    for source, caption in ((first, 'FIRST'), (second, 'SECOND')):
+        source.write_text('<SYNC Start=0><P Class=KRCC>%s<SYNC Start=1000><P Class=KRCC>&nbsp;' % caption)
+    result = run_cli(first, second, cwd=tmp_path)
+    assert result.returncode == 1
+    assert 'Competing output' in result.stderr
+    output = (tmp_path / 'episode.kor.ass').read_text()
+    assert 'FIRST' in output and 'SECOND' not in output
