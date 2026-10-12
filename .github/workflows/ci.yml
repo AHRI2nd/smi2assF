@@ -32,3 +32,41 @@ jobs:
 
       - name: Run tests
         run: xvfb-run -a python -m pytest -q
+
+  windows-runtime:
+    name: Windows Python ${{ matrix.python-version }} candidate
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: '3.13.13'
+            python-minor: '3.13'
+          - python-version: '3.14.8'
+            python-minor: '3.14'
+    env:
+      PYTHON: python
+      BUILD_PYTHON_VERSION: ${{ matrix.python-minor }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up candidate runtime
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Prepare the requested runtime
+        shell: bash
+        run: bash install.sh
+      - name: Verify tests, EXE and installer lifecycle
+        shell: bash
+        run: bash build.sh
+      - name: Preserve candidate installer diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: windows-${{ matrix.python-minor }}-installer-diagnostics
+          path: build/installer-smoke-logs/
+          if-no-files-found: ignore

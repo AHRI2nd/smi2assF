@@ -44,8 +44,9 @@ def test_windows_release_uses_python_with_tcl_86_for_tkinterdnd():
 
     assert "python-version: '3.13'" in release_workflow
     assert 'PYTHON: python' in release_workflow
-    assert '3.13' in install_script
-    assert 'venv-py313' in build_script
+    assert 'select_python_version' in install_script
+    assert 'select_venv_python' in build_script
+    assert 'default_version=3.13' in (PROJECT_ROOT / 'scripts/python_runtime.sh').read_text()
 
 
 def test_windows_installer_smoke_is_silent_diagnostic_and_bounded():

@@ -268,6 +268,9 @@ def test_command_timeout_terminates_with_a_bounded_error():
 def test_github_macos_build_cannot_disable_release_signing(tmp_path):
     script = Path(__file__).resolve().parents[1] / 'build.sh'
     (tmp_path / 'build.sh').write_text(script.read_text())
+    import shutil
+    (tmp_path / 'scripts').mkdir()
+    shutil.copy(script.parent / 'scripts/python_runtime.sh', tmp_path / 'scripts/python_runtime.sh')
     classifier = tmp_path / 'os_classifier.sh'
     classifier.write_text('#!/bin/sh\nprintf "osx-arm64\\n"\n')
     classifier.chmod(0o755)
@@ -285,6 +288,9 @@ def test_signed_build_checksums_only_after_both_notarization_stages(tmp_path, fa
 
     script = Path(__file__).resolve().parents[1] / 'build.sh'
     (tmp_path / 'build.sh').write_text(script.read_text())
+    import shutil
+    (tmp_path / 'scripts').mkdir()
+    shutil.copy(script.parent / 'scripts/python_runtime.sh', tmp_path / 'scripts/python_runtime.sh')
     classifier = tmp_path / 'os_classifier.sh'
     classifier.write_text('#!/bin/sh\nprintf "osx-arm64\\n"\n')
     classifier.chmod(0o755)
@@ -295,7 +301,9 @@ import os
 from pathlib import Path
 import sys
 arguments = sys.argv[1:]
-if arguments[:2] == ['-m', 'pytest'] or (arguments[:1] == ['-c'] and 'pytest' in arguments[1]):
+if arguments[:1] == ['-c'] and 'sys.version_info' in arguments[1]:
+    print('3.14')
+elif arguments[:2] == ['-m', 'pytest'] or (arguments[:1] == ['-c'] and 'pytest' in arguments[1]):
     import json
     Path('pytest-command.json').write_text(json.dumps(arguments))
 elif arguments[:2] == ['scripts/build_icon_path.py', 'osx-arm64']:

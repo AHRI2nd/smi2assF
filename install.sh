@@ -1,38 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+OS_CLASSIFIER="$(./os_classifier.sh)"
+source scripts/python_runtime.sh
+select_python_version "$OS_CLASSIFIER"
 if [[ -n "${PYTHON:-}" ]]; then
   PYTHON_BIN="$PYTHON"
-elif command -v python3.14 >/dev/null 2>&1; then
-  PYTHON_BIN=python3.14
+elif command -v "python$REQUESTED_PYTHON_VERSION" >/dev/null 2>&1; then
+  PYTHON_BIN="python$REQUESTED_PYTHON_VERSION"
+elif [[ "$OS_CLASSIFIER" == windows-* ]]; then
+  PYTHON_BIN=python
 else
   PYTHON_BIN=python3
 fi
-
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Python was not found: $PYTHON_BIN" >&2
   exit 1
 fi
-
-PYTHON_MINOR="$("$PYTHON_BIN" -c 'import sys; print(sys.version_info.minor)')"
-if [[ "$PYTHON_MINOR" != 13 && "$PYTHON_MINOR" != 14 ]] || \
-  ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info.major != 3)'; then
-  echo "Python 3.13 or 3.14 is required to build smi2ass." >&2
-  exit 1
-fi
-
+verify_python_version "$PYTHON_BIN"
 mkdir -p build
-VENV_DIR="build/venv-py3$PYTHON_MINOR"
 "$PYTHON_BIN" -m venv "$VENV_DIR"
 
-if [[ -x "$VENV_DIR/bin/python" ]]; then
-  VENV_PYTHON="$VENV_DIR/bin/python"
-else
-  VENV_PYTHON="$VENV_DIR/Scripts/python.exe"
-fi
+select_venv_python
 
 "$VENV_PYTHON" -m pip install --upgrade pip
 "$VENV_PYTHON" -m pip install -r requirements-dev.txt
 "$VENV_PYTHON" scripts/prepare_tkdnd.py
 
-echo "Prepared Python 3.$PYTHON_MINOR build environment at $VENV_DIR"
+echo "Prepared Python $REQUESTED_PYTHON_VERSION build environment at $VENV_DIR"

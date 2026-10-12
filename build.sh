@@ -17,34 +17,17 @@ if [[ "$OS_CLASSIFIER" == osx-* && "$MACOS_RELEASE_SIGNING" == 1 ]]; then
   done
 fi
 
-VENV_PYTHON=""
-if [[ "$OS_CLASSIFIER" == windows-* ]]; then
-  VENV_CANDIDATES=(build/venv-py313 build/venv-py314)
-else
-  VENV_CANDIDATES=(build/venv-py314 build/venv-py313)
-fi
-for VENV_DIR in "${VENV_CANDIDATES[@]}"; do
-  if [[ -x "$VENV_DIR/bin/python" ]]; then
-    VENV_PYTHON="$VENV_DIR/bin/python"
-    break
-  elif [[ -x "$VENV_DIR/Scripts/python.exe" ]]; then
-    VENV_PYTHON="$VENV_DIR/Scripts/python.exe"
-    break
-  fi
-done
-if [[ -z "$VENV_PYTHON" ]]; then
-  echo "Build environment not found. Run install.sh first." >&2
-  exit 1
-fi
-
-"$VENV_PYTHON" -c 'import sys; raise SystemExit(sys.version_info.major != 3 or sys.version_info.minor not in (13, 14))'
-"$VENV_PYTHON" -c 'import tkinter; import tkinterdnd2'
+source scripts/python_runtime.sh
+select_python_version "$OS_CLASSIFIER"
+select_venv_python
 if [[ "$OS_CLASSIFIER" == osx-* ]]; then
+  "$VENV_PYTHON" scripts/report_runtime.py -ApplePersistenceIgnoreState YES -NSQuitAlwaysKeepsWindows NO
   # Cocoa arguments affect this test process only; preserve user preferences.
-  "$VENV_PYTHON" -c 'import pytest; raise SystemExit(pytest.main(["-q"]))' \
+  "$VENV_PYTHON" -c 'import pytest; raise SystemExit(pytest.main(["-q", "-W", "error", "-rs"]))' \
     -ApplePersistenceIgnoreState YES -NSQuitAlwaysKeepsWindows NO
 else
-  "$VENV_PYTHON" -m pytest -q
+  "$VENV_PYTHON" scripts/report_runtime.py
+  "$VENV_PYTHON" -m pytest -q -W error -rs
 fi
 
 export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-$PWD/build/pyinstaller-config}"
