@@ -68,3 +68,97 @@ def test_actual_gui_reports_empty_and_mixed_conversion_results(tmp_path, include
         assert app.state_values['outputs'] == int(include_valid)
     finally:
         app.root.destroy()
+
+
+def pump_until_finished(app):
+    deadline = time.monotonic() + 4
+    while app.busy and time.monotonic() < deadline:
+        app.root.update()
+        time.sleep(0.005)
+    assert not app.busy
+
+
+def test_slow_scan_keeps_heartbeat_running(tmp_path, monkeypatch):
+    import smi2ass_gui
+    source = tmp_path / 'cue.smi'
+    source.write_text('<SYNC Start=0><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;')
+    original = smi2ass_gui.scan_smi_files
+    def slow_scan(paths):
+        time.sleep(0.25)
+        return original(paths)
+    monkeypatch.setattr(smi2ass_gui, 'scan_smi_files', slow_scan)
+    app = Smi2AssApp()
+    beats = []
+    try:
+        app.root.after(10, lambda: beats.append(time.monotonic()))
+        started = time.monotonic()
+        assert app.add_paths([tmp_path]) == 1
+        assert time.monotonic() - started < 0.15
+        assert app.busy
+        assert app.add_paths([source]) == 0
+        pump_until_finished(app)
+        assert beats[0] - started < 0.2
+        assert app.state_values['outputs'] == 1
+    finally:
+        app._dispose()
+
+
+def test_outer_worker_error_finishes_busy_state(tmp_path, monkeypatch):
+    import smi2ass_gui
+    source = tmp_path / 'cue.smi'
+    source.write_text('fixture')
+    def broken(paths, overwrite):
+        raise RuntimeError('outer conversion failure')
+    monkeypatch.setattr(smi2ass_gui, 'convert_smi_files', broken)
+    app = Smi2AssApp()
+    try:
+        # Invoke the worker synchronously so the old uncaught error is observable.
+        app.busy = True
+        app._convert_worker(app.events, (source,), False, 0)
+        app._poll_worker()
+        if app.busy:
+            pump_until_finished(app)
+        assert app.drop_state == 'failed'
+        assert app.state_values['failed'] == 1
+        assert str(app.overwrite_checkbox.cget('state')) == 'normal'
+    finally:
+        app._dispose()
+
+
+def test_invalid_drop_list_does_not_start_conversion():
+    from types import SimpleNamespace
+    app = Smi2AssApp()
+    try:
+        assert app._on_drop(SimpleNamespace(data='{unclosed')) == 'refuse_drop'
+        assert not app.busy
+    finally:
+        app._dispose()
+
+
+def test_destroy_during_scan_does_not_retain_tk_app(tmp_path, monkeypatch):
+    import gc
+    import threading
+    import weakref
+    import smi2ass_gui
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    original = smi2ass_gui.scan_smi_files
+    def pending_scan(paths):
+        entered.set()
+        assert release.wait(3)
+        try:
+            return original(paths)
+        finally:
+            finished.set()
+    monkeypatch.setattr(smi2ass_gui, 'scan_smi_files', pending_scan)
+    app = Smi2AssApp()
+    reference = weakref.ref(app)
+    try:
+        app.add_paths([tmp_path])
+        assert entered.wait(2)
+        app.root.destroy()
+        del app
+        gc.collect()
+        assert reference() is None
+    finally:
+        release.set()
+    assert finished.wait(3)

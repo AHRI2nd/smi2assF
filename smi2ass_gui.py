@@ -139,6 +139,8 @@ class Smi2AssApp:
         state = self.drop_state
         if state == 'idle':
             return self._text('drop_hint'), self._text('drop_detail')
+        if state == 'scanning':
+            return self._text('status_scanning_title'), self._text('status_scanning_detail')
         if state == 'converting':
             return self._text('status_converting_title'), self._text('status_converting_detail', **self.state_values)
         if state in ('done', 'failed', 'partial'):
@@ -207,64 +209,88 @@ class Smi2AssApp:
         return COPY
 
     def add_paths(self, paths):
-        if self.busy:
-            self._set_drop_state('busy_add')
+        """Accept inputs asynchronously and return the accepted input count."""
+        if self.busy or self._disposed:
+            if not self._disposed:
+                self._set_drop_state('busy_add')
             return 0
-        scan_result = scan_smi_files(paths)
-        found = scan_result.files
-        if not found:
-            if scan_result.errors:
-                self._set_drop_state('scan_error', count=len(scan_result.errors))
-            else:
-                self._set_drop_state('empty')
+        paths = tuple(paths)
+        if not paths:
             return 0
-        self._start_conversion(found, scan_errors=len(scan_result.errors))
-        return len(found)
+        self._start_conversion(paths)
+        return len(paths)
 
     def _on_drop(self, event):
         self.dragging = False
-        if self.busy:
+        if self.busy or self._disposed:
             return REFUSE_DROP
-        self.add_paths(self.root.tk.splitlist(event.data))
+        try:
+            paths = self.root.tk.splitlist(event.data)
+        except tk.TclError:
+            return REFUSE_DROP
+        self.add_paths(paths)
         return COPY
 
     def _start_conversion(self, files, scan_errors=0):
-        if self.busy or not files:
+        if self.busy or self._disposed or not files:
             return
         self.busy = True
         overwrite = self.overwrite_existing.get()
         self.overwrite_checkbox.configure(state='disabled')
-        self._set_drop_state('converting', count=len(files))
-        threading.Thread(target=self._convert_worker, args=(self.events, tuple(files), overwrite, scan_errors),
-                         daemon=True).start()
+        self._set_drop_state('scanning')
+        try:
+            threading.Thread(target=self._convert_worker, args=(self.events, tuple(files), overwrite, scan_errors),
+                             daemon=True).start()
+        except Exception as error:
+            self.events.put(('error', len(files), scan_errors, str(error)))
         self._poll_id = self.root.after(75, self._poll_worker)
 
     @staticmethod
-    def _convert_worker(events, files, overwrite, scan_errors):
-        # The worker owns conversion data only, never a Tk window or interpreter.
-        summary = convert_smi_files(files, overwrite=overwrite)
-        events.put(('done', summary, scan_errors))
+    def _convert_worker(events, paths, overwrite, scan_errors=0):
+        # The worker owns data only; all Tk reads/writes belong to the UI thread.
+        count = len(paths)
+        try:
+            scanned = scan_smi_files(paths)
+            scan_errors += len(scanned.errors)
+            count = len(scanned.files)
+            if not count:
+                events.put(('empty', scan_errors))
+                return
+            events.put(('scanned', count))
+            summary = convert_smi_files(scanned.files, overwrite=overwrite)
+            events.put(('done', summary, scan_errors))
+        except Exception as error:
+            events.put(('error', count, scan_errors, str(error)))
 
     def _poll_worker(self):
         self._poll_id = None
         if self._disposed:
             return
-        try:
-            event = self.events.get_nowait()
-        except queue.Empty:
-            if self.busy:
-                self._poll_id = self.root.after(75, self._poll_worker)
-            return
-        if event[0] == 'done':
-            summary, scan_errors = event[1], event[2]
+        while True:
+            try:
+                event = self.events.get_nowait()
+            except queue.Empty:
+                break
+            kind = event[0]
+            if kind == 'scanned':
+                self._set_drop_state('converting', count=event[1])
+                continue
             self.busy = False
             self.overwrite_checkbox.configure(state='normal')
-            state = 'done'
-            if summary.failed or scan_errors:
-                state = 'partial' if summary.outputs or summary.existing else 'failed'
-            self._set_drop_state(state,
-                                 total=summary.total, outputs=summary.outputs,
-                                 existing=summary.existing, failed=summary.failed, scan_errors=scan_errors)
+            if kind == 'empty':
+                self._set_drop_state('scan_error' if event[1] else 'empty', count=event[1])
+            elif kind == 'error':
+                self._set_drop_state('failed', total=event[1], outputs=0, existing=0,
+                                     failed=max(1, event[1]), scan_errors=event[2])
+            elif kind == 'done':
+                summary, scan_errors = event[1], event[2]
+                state = 'done'
+                if summary.failed or scan_errors:
+                    state = 'partial' if summary.outputs or summary.existing else 'failed'
+                self._set_drop_state(state, total=summary.total, outputs=summary.outputs,
+                                     existing=summary.existing, failed=summary.failed, scan_errors=scan_errors)
+        if self.busy:
+            self._poll_id = self.root.after(75, self._poll_worker)
 
     def _on_destroy(self, event):
         if event.widget is self.root:
