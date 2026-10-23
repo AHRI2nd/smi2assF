@@ -9,6 +9,7 @@ from tkinter import font, messagebox, ttk
 
 from tkinterdnd2 import COPY, DND_FILES, REFUSE_DROP, TkinterDnD
 
+from smi2ass_preferences import load_preferences, save_preferences
 from smi2ass_gui_support import (
     convert_smi_files,
     detect_ui_language,
@@ -37,14 +38,23 @@ class Smi2AssApp:
 
         self.events = queue.Queue()
         self.busy = False
-        self.overwrite_existing = tk.BooleanVar(master=self.root, value=False)
-        self.include_language_suffix = tk.BooleanVar(master=self.root, value=True)
+        preferences = load_preferences()
+        self.overwrite_existing = tk.BooleanVar(
+            master=self.root, value=preferences['overwrite_existing'],
+        )
+        self.include_language_suffix = tk.BooleanVar(
+            master=self.root, value=preferences['include_language_suffix'],
+        )
         self.drop_state = 'idle'
         self.state_values = {}
         self.dragging = False
         self._redraw_id = None
         self._disposed = False
         self._poll_id = None
+        self._preference_trace_ids = (
+            self.overwrite_existing.trace_add('write', self._save_preferences),
+            self.include_language_suffix.trace_add('write', self._save_preferences),
+        )
         self.palette = asdict(LIGHT)
         configure_native_appearance(self.root, detect_system_theme(self.root))
         self._build_ui()
@@ -61,6 +71,14 @@ class Smi2AssApp:
 
     def _text(self, key, **values):
         return localized_text(key, self.language, **values)
+
+    def _save_preferences(self, *_):
+        if self._disposed:
+            return
+        save_preferences({
+            'overwrite_existing': self.overwrite_existing.get(),
+            'include_language_suffix': self.include_language_suffix.get(),
+        })
 
     def _build_ui(self):
         self.frame = tk.Frame(self.root, padx=16, pady=16, bg=self.palette['background'])
@@ -326,6 +344,11 @@ class Smi2AssApp:
             if identity is not None:
                 self.root.after_cancel(identity)
         self._redraw_id = self._poll_id = None
+        for variable, trace_id in zip(
+            (self.overwrite_existing, self.include_language_suffix), self._preference_trace_ids,
+        ):
+            variable.trace_remove('write', trace_id)
+        self._preference_trace_ids = ()
         # Finalize Tcl variables and fonts on the UI thread, before worker GC.
         self.overwrite_existing = None
         self.include_language_suffix = None

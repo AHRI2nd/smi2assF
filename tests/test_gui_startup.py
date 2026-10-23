@@ -69,6 +69,31 @@ def test_language_suffix_checkbox_controls_single_language_output_name(tmp_path)
         app.root.destroy()
 
 
+def test_checkbox_preferences_load_at_start_and_save_on_change(monkeypatch):
+    import smi2ass_gui
+    saved = []
+    monkeypatch.setattr(smi2ass_gui, 'load_preferences', lambda: {
+        'overwrite_existing': True,
+        'include_language_suffix': False,
+    })
+    monkeypatch.setattr(smi2ass_gui, 'save_preferences', lambda preferences: saved.append(preferences) or True)
+    app = Smi2AssApp()
+    try:
+        assert app.overwrite_existing.get()
+        assert not app.include_language_suffix.get()
+        app.overwrite_existing.set(False)
+        assert saved[-1] == {
+            'overwrite_existing': False,
+            'include_language_suffix': False,
+        }
+        app.include_language_suffix.set(True)
+        assert saved[-1] == {
+            'overwrite_existing': False,
+            'include_language_suffix': True,
+        }
+    finally:
+        app._dispose()
+
 
 @pytest.mark.parametrize('include_valid, expected', [(False, 'failed'), (True, 'partial')])
 def test_actual_gui_reports_empty_and_mixed_conversion_results(tmp_path, include_valid, expected):
