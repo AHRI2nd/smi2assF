@@ -18,6 +18,35 @@ def test_convert_smi_file_returns_written_outputs_and_repair_diagnostics(tmp_pat
     assert result.outputs == (output,)
     assert output.is_file()
     assert 'First cue' in output.read_text(encoding='utf-8')
+
+
+def test_convert_smi_file_can_omit_language_suffix_for_single_language(tmp_path):
+    source = tmp_path / 'episode.smi'
+    source.write_text(
+        '<SYNC Start=0><P Class=KRCC>First cue\n'
+        '<SYNC Start=1000><P Class=KRCC>&nbsp;',
+        encoding='utf-8',
+    )
+
+    result = convert_smi_file(source, include_language_suffix=False)
+
+    output = tmp_path / 'episode.ass'
+    assert result.outputs == (output,)
+    assert output.is_file()
+
+
+def test_convert_smi_file_keeps_language_suffix_for_multiple_languages(tmp_path):
+    source = tmp_path / 'episode.smi'
+    source.write_text(
+        '<SYNC Start=0><P Class=KRCC>Korean\n'
+        '<P Class=ENCC>English\n'
+        '<SYNC Start=1000><P Class=KRCC>&nbsp;<P Class=ENCC>&nbsp;',
+        encoding='utf-8',
+    )
+
+    result = convert_smi_file(source, include_language_suffix=False)
+
+    assert {path.name for path in result.outputs} == {'episode.kor.ass', 'episode.eng.ass'}
     assert any(item.code == 'SYNC_CLOSE_INSERTED' for item in result.diagnostics)
 
 

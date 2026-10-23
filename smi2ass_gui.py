@@ -38,6 +38,7 @@ class Smi2AssApp:
         self.events = queue.Queue()
         self.busy = False
         self.overwrite_existing = tk.BooleanVar(master=self.root, value=False)
+        self.include_language_suffix = tk.BooleanVar(master=self.root, value=True)
         self.drop_state = 'idle'
         self.state_values = {}
         self.dragging = False
@@ -47,7 +48,7 @@ class Smi2AssApp:
         self.palette = asdict(LIGHT)
         configure_native_appearance(self.root, detect_system_theme(self.root))
         self._build_ui()
-        for target in (self.root, self.drop_zone, self.overwrite_checkbox):
+        for target in (self.root, self.drop_zone, self.overwrite_checkbox, self.language_suffix_checkbox):
             target.drop_target_register(DND_FILES)
             target.dnd_bind('<<Drop>>', self._on_drop)
             target.dnd_bind('<<DropEnter>>', self._on_drop_enter)
@@ -83,13 +84,19 @@ class Smi2AssApp:
             style='Converter.TCheckbutton',
         )
         self.overwrite_checkbox.grid(row=1, column=0, sticky='w', pady=(12, 0))
+        self.language_suffix_checkbox = ttk.Checkbutton(
+            self.frame, text=self._text('language_suffix'), variable=self.include_language_suffix,
+            style='Converter.TCheckbutton',
+        )
+        self.language_suffix_checkbox.grid(row=2, column=0, sticky='w', pady=(4, 0))
         self._update_minimum_size()
         self._queue_redraw()
 
     def _update_minimum_size(self):
         # Measure actual Tk wrapping, including large counts and accessibility fonts.
         title, detail = self._state_copy()
-        width = max(320, self.overwrite_checkbox.winfo_reqwidth() + 32,
+        checkboxes = (self.overwrite_checkbox, self.language_suffix_checkbox)
+        width = max(320, *(checkbox.winfo_reqwidth() + 32 for checkbox in checkboxes),
                     max((self.detail_font.measure(line) for line in detail.splitlines()), default=0) + 72)
         heights = []
         for text, text_font in ((title, self.title_font), (detail, self.detail_font)):
@@ -100,7 +107,8 @@ class Smi2AssApp:
             self.drop_zone.delete(item)
         # Tk line bounding boxes extend two pixels beyond the icon on Win/X11.
         content_height = 40 + heights[0] + 6 + heights[1] + 28
-        minimum = (width, max(260, content_height + self.overwrite_checkbox.winfo_reqheight() + 44))
+        checkbox_height = sum(checkbox.winfo_reqheight() for checkbox in checkboxes) + 4
+        minimum = (width, max(260, content_height + checkbox_height + 44))
         if minimum != getattr(self, '_minimum', None):
             self._minimum = minimum
             self.root.minsize(*minimum)
@@ -243,17 +251,20 @@ class Smi2AssApp:
             return
         self.busy = True
         overwrite = self.overwrite_existing.get()
-        self.overwrite_checkbox.configure(state='disabled')
+        include_language_suffix = self.include_language_suffix.get()
+        for checkbox in (self.overwrite_checkbox, self.language_suffix_checkbox):
+            checkbox.configure(state='disabled')
         self._set_drop_state('scanning')
         try:
-            threading.Thread(target=self._convert_worker, args=(self.events, tuple(files), overwrite, scan_errors),
+            threading.Thread(target=self._convert_worker,
+                             args=(self.events, tuple(files), overwrite, scan_errors, include_language_suffix),
                              daemon=True).start()
         except Exception as error:
             self.events.put(('error', len(files), scan_errors, str(error)))
         self._poll_id = self.root.after(75, self._poll_worker)
 
     @staticmethod
-    def _convert_worker(events, paths, overwrite, scan_errors=0):
+    def _convert_worker(events, paths, overwrite, scan_errors=0, include_language_suffix=True):
         # The worker owns data only; all Tk reads/writes belong to the UI thread.
         count = len(paths)
         try:
@@ -264,7 +275,8 @@ class Smi2AssApp:
                 events.put(('empty', scan_errors))
                 return
             events.put(('scanned', count))
-            summary = convert_smi_files(scanned.files, overwrite=overwrite)
+            summary = convert_smi_files(scanned.files, overwrite=overwrite,
+                                        include_language_suffix=include_language_suffix)
             events.put(('done', summary, scan_errors))
         except Exception as error:
             events.put(('error', count, scan_errors, str(error)))
@@ -283,7 +295,8 @@ class Smi2AssApp:
                 self._set_drop_state('converting', count=event[1])
                 continue
             self.busy = False
-            self.overwrite_checkbox.configure(state='normal')
+            for checkbox in (self.overwrite_checkbox, self.language_suffix_checkbox):
+                checkbox.configure(state='normal')
             if kind == 'empty':
                 self._set_drop_state('scan_error' if event[1] else 'empty', count=event[1])
             elif kind == 'error':
@@ -315,6 +328,7 @@ class Smi2AssApp:
         self._redraw_id = self._poll_id = None
         # Finalize Tcl variables and fonts on the UI thread, before worker GC.
         self.overwrite_existing = None
+        self.include_language_suffix = None
         self.title_font = self.detail_font = None
         if destroy:
             self.root.destroy()

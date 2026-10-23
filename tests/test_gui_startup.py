@@ -15,7 +15,7 @@ def test_gui_starts_and_registers_its_drag_target():
         assert app.root.winfo_exists()
         assert app.drop_zone.winfo_exists()
         assert app.drop_zone.master.winfo_children() == [
-            app.drop_zone, app.overwrite_checkbox,
+            app.drop_zone, app.overwrite_checkbox, app.language_suffix_checkbox,
         ]
     finally:
         app.root.destroy()
@@ -44,6 +44,30 @@ def test_adding_dropped_paths_starts_conversion_automatically(tmp_path):
         assert (tmp_path / 'episode.kor.ass').is_file()
     finally:
         app.root.destroy()
+
+
+def test_language_suffix_checkbox_controls_single_language_output_name(tmp_path):
+    source = tmp_path / 'episode.smi'
+    source.write_text(
+        '<SYNC Start=0><P Class=KRCC>First cue\n'
+        '<SYNC Start=1000><P Class=KRCC>&nbsp;',
+        encoding='utf-8',
+    )
+    app = Smi2AssApp()
+    try:
+        assert app.language_suffix_checkbox.instate(['selected'])
+        app.include_language_suffix.set(False)
+        assert app.add_paths([source]) == 1
+        deadline = time.monotonic() + 3
+        while app.busy and time.monotonic() < deadline:
+            app.root.update()
+            time.sleep(0.01)
+        assert not app.busy
+        assert (tmp_path / 'episode.ass').is_file()
+        assert not (tmp_path / 'episode.kor.ass').exists()
+    finally:
+        app.root.destroy()
+
 
 
 @pytest.mark.parametrize('include_valid, expected', [(False, 'failed'), (True, 'partial')])
@@ -107,7 +131,7 @@ def test_outer_worker_error_finishes_busy_state(tmp_path, monkeypatch):
     import smi2ass_gui
     source = tmp_path / 'cue.smi'
     source.write_text('fixture')
-    def broken(paths, overwrite):
+    def broken(paths, overwrite, include_language_suffix=True):
         raise RuntimeError('outer conversion failure')
     monkeypatch.setattr(smi2ass_gui, 'convert_smi_files', broken)
     app = Smi2AssApp()

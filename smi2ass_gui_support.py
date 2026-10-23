@@ -26,6 +26,7 @@ UI_TEXT = {
         'drop_again': '.smi 파일이나 폴더를 다시 놓으세요',
         'result_summary': '대상 {total} · ASS 생성 {outputs}\n기존 ASS 유지 {existing}\n오류 {failed} · 읽기 실패 {scan_errors}',
         'overwrite': '기존 ASS 파일 덮어쓰기',
+        'language_suffix': '파일명에 언어 코드(.kor) 표시',
         'status_busy_add': '변환이 끝날 때까지 기다려 주세요.',
         'status_no_files': '.smi 또는 .SMI 파일을 찾지 못했습니다.',
         'status_scan_errors': '{count}개 위치에서 파일을 읽지 못했습니다.',
@@ -51,6 +52,7 @@ UI_TEXT = {
         'drop_again': 'Drop .smi files or folders to try again',
         'result_summary': 'Files {total} · ASS {outputs}\nKept {existing}\nErrors {failed} · Unreadable {scan_errors}',
         'overwrite': 'Overwrite existing ASS files',
+        'language_suffix': 'Include language code (.kor) in filenames',
         'status_busy_add': 'Wait for the current conversion to finish.',
         'status_no_files': 'No .smi or .SMI files found.',
         'status_scan_errors': 'Could not read files from {count} location(s).',
@@ -105,7 +107,7 @@ class SmiConversionSummary:
     failed: int
 
 
-def convert_smi_files(paths, overwrite=False):
+def convert_smi_files(paths, overwrite=False, include_language_suffix=True):
     """Convert each dropped SMI file and collect a compact UI summary."""
     from smi2ass import convert_smi_file, has_conversion_problem
 
@@ -114,7 +116,10 @@ def convert_smi_files(paths, overwrite=False):
     paths = tuple(paths)
     for path in paths:
         try:
-            result = convert_smi_file(path, overwrite=overwrite, output_claims=output_claims)
+            result = convert_smi_file(
+                path, overwrite=overwrite, output_claims=output_claims,
+                include_language_suffix=include_language_suffix,
+            )
         except Exception:
             failed += 1
             continue

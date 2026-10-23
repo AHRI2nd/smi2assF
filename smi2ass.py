@@ -644,7 +644,7 @@ def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
     return separated, names
 
 
-def convert_smi_file(smi_path, overwrite=True, *, output_claims=None):
+def convert_smi_file(smi_path, overwrite=True, *, output_claims=None, include_language_suffix=True):
     # Open as binary and detect the encoding.
     with open(smi_path, 'rb') as smi_file:
         smi_bytes = smi_file.read()
@@ -666,9 +666,11 @@ def convert_smi_file(smi_path, overwrite=True, *, output_claims=None):
     output_data = {}
     for lang, contents in ass_dict.items():
         output_language = lang or default_lang_code
-        ass_path = input_path.with_name(
-            '%s.%s.ass' % (output_stem, output_language),
-        )
+        if include_language_suffix or len(ass_dict) > 1:
+            output_name = '%s.%s.ass' % (output_stem, output_language)
+        else:
+            output_name = '%s.ass' % output_stem
+        ass_path = input_path.with_name(output_name)
         output_data[ass_path] = contents
 
     existing_outputs = []
