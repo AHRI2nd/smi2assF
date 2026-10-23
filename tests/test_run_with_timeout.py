@@ -1,6 +1,10 @@
 import subprocess
 import sys
 import time
+import os
+import signal
+
+import pytest
 
 from scripts.run_with_timeout import run_with_timeout
 
@@ -44,6 +48,29 @@ def test_run_with_timeout_preserves_command_failure():
     result = run_with_timeout([sys.executable, '-c', 'raise SystemExit(7)'], 5, 'failing command')
 
     assert result == 7
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX process-group signal handling')
+def test_timeout_kills_resistant_child_after_parent_exits(tmp_path):
+    pidfile = tmp_path / 'owned-child.pid'
+    marker = tmp_path / 'child-executed-after-timeout'
+    child = (
+        'import os,signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); '
+        f'pathlib.Path({str(pidfile)!r}).write_text(str(os.getpid())); '
+        f'time.sleep(2); pathlib.Path({str(marker)!r}).touch(); time.sleep(30)'
+    )
+    parent = f'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",{child!r}]); time.sleep(30)'
+    try:
+        assert run_with_timeout([sys.executable, '-c', parent], 1, 'resistant child') == 124
+        assert pidfile.exists(), 'The child must start for this regression to be exercised'
+        time.sleep(1.3)
+        assert not marker.exists()
+    finally:
+        if pidfile.exists():
+            try:
+                os.kill(int(pidfile.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def test_run_with_timeout_cli_accepts_arguments_after_separator():

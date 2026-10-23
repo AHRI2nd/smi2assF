@@ -2,6 +2,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 
@@ -86,3 +88,15 @@ def test_cli_batch_output_collision_preserves_first_input(tmp_path):
     assert 'Competing output' in result.stderr
     output = (tmp_path / 'episode.kor.ass').read_text()
     assert 'FIRST' in output and 'SECOND' not in output
+@pytest.mark.parametrize('body', [
+    '<SYNC Start=' + '9' * 4500 + '><P>Bad<SYNC Start=1><P>&nbsp;',
+    '<SYNC Start=0><P>' + '<b>' * 1100 + 'Bad' + '</b>' * 1100 + '<SYNC Start=1000><P>&nbsp;',
+], ids=['oversized-timestamp', 'excessive-nesting'])
+def test_cli_continues_after_parser_limit_error(tmp_path, body):
+    from smi2ass import main
+    damaged = tmp_path / 'damaged.smi'
+    valid = tmp_path / 'valid.smi'
+    damaged.write_text(body, encoding='utf-8')
+    valid.write_text('<SYNC Start=0><P>Good<SYNC Start=1000><P>&nbsp;', encoding='utf-8')
+    assert main([str(damaged), str(valid)]) == 1
+    assert 'Good' in (tmp_path / 'valid.kor.ass').read_text()

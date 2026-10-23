@@ -21,7 +21,6 @@
 
 import argparse
 import chardet
-import html
 import os
 import re
 import sys
@@ -29,7 +28,7 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 from smi2ass_output import publish_ass, UnsafeOutputPath
 
 default_lang_code = 'kor'
@@ -219,10 +218,6 @@ css3_names_to_hex = {
     'yellowgreen': '#9acd32',
 }
 
-space_chars = [
-    u'\u00A0', u'\u180E', u'\u2000', u'\u2001', u'\u2002', u'\u2003', u'\u2004', u'\u2005', u'\u2006',
-    u'\u2007', u'\u2008', u'\u2009', u'\u200A', u'\u200B', u'\u202F', u'\u205F', u'\u3000' ]
-
 @dataclass(frozen=True)
 class ConversionDiagnostic:
     code: str
@@ -407,7 +402,13 @@ def _parse_timestamp(raw_value, source, source_offset, diagnostics):
         )
         return None
 
-    match = TIMESTAMP_RE.fullmatch(str(raw_value))
+    # Bound numeric input before int() reaches the interpreter's digit limit.
+    raw_value = str(raw_value)
+    if len(raw_value.strip().lstrip('+-').rstrip('?!.,;:')) > 18:
+        _add_diagnostic(diagnostics, source, 'INVALID_TIMESTAMP', 'skip', source_offset,
+                        'Skipped an oversized Start timestamp.')
+        return None
+    match = TIMESTAMP_RE.fullmatch(raw_value)
     if match:
         timestamp = int(match.group(1))
         if timestamp < 0:
@@ -458,6 +459,11 @@ def smi2ass(smi_sgml):
 
 def convert_smi(smi_sgml):
     diagnostics = []
+    # Mask comment markup while retaining diagnostic lines. Keep those lines
+    # inside a comment so they never become visible caption whitespace.
+    smi_sgml = re.sub(r'<!--.*?(?:-->|$)',
+                     lambda match: '<!--' + '\n' * match.group(0).count('\n') + '-->',
+                     smi_sgml, flags=re.DOTALL)
     smi_sgml = _repair_sync_boundaries(smi_sgml, diagnostics)
     smi_sgml = _repair_paragraph_boundaries(smi_sgml)
     smi_sgml = _repair_formatting_tags(smi_sgml, diagnostics)
@@ -471,20 +477,17 @@ def convert_smi(smi_sgml):
     smi_sgml = smi_sgml.replace(u'\u000D', u' ')
     smi_sgml = smi_sgml.replace('\t', ' ')
 
-    # Replace special space characters so that BeautifulSoup can't remove them.
-    for spaceChar in space_chars:
-        smi_sgml = smi_sgml.replace(spaceChar, 'smi2ass_unicode(' + str(ord(spaceChar)) + ')')
-
-    # Replace spaces around a tag with '&nbsp;' so that they are not stripped when we replace a tag.
-    smi_sgml = re.sub(r'> +<', '>smi2ass_unicode(32)<', smi_sgml)
-    smi_sgml = re.sub(r'> +', '>smi2ass_unicode(32)', smi_sgml)
-    smi_sgml = re.sub(r' +<', 'smi2ass_unicode(32)<', smi_sgml)
-    # but not <rt> tags
-    smi_sgml = re.sub(r'< *[Rr][Tt] *>(smi2ass_unicode\([0-9]+\))+', '<rt>', smi_sgml)
-    smi_sgml = re.sub(r'(smi2ass_unicode\([0-9]+\))+</ *[Rr][Tt] *>', '</rt>', smi_sgml)
-
     #Parse lines with BeautifulSoup based on sync tag
-    soup = BeautifulSoup(smi_sgml, 'html.parser')
+    soup = BeautifulSoup(smi_sgml, 'html.parser',
+                         preserve_whitespace_tags={'sync', 'p', 'b', 'i', 'u', 's', 'font', 'rt'})
+    pending = [(soup, 0)]
+    while pending:
+        node, depth = pending.pop()
+        if depth > 128:
+            diagnostics.append(ConversionDiagnostic('INPUT_NESTING_LIMIT', 'skip', 1,
+                                                    'Input markup exceeds the supported nesting depth.'))
+            return {}, diagnostics
+        pending.extend((child, depth + 1) for child in node.children if isinstance(child, Tag))
     smi_lines = soup.find_all('sync')
     if not smi_lines:
         diagnostics.append(ConversionDiagnostic(
@@ -511,7 +514,7 @@ def smi2ass_internal(sln, diagnostics=None):
     diagnostics = diagnostics if diagnostics is not None else []
     ass_lines = []
     for line_idx, entry in enumerate(sln):
-        final_text = html.unescape(re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', entry.tag.get_text())).strip()
+        final_text = entry.tag.get_text().strip()
         if line_idx + 1 == len(sln) and final_text:
             diagnostics.append(ConversionDiagnostic('MISSING_END_TIMESTAMP', 'skip', entry.line,
                                                     'The last text cue has no following timestamp.'))
@@ -525,10 +528,7 @@ def smi2ass_internal(sln, diagnostics=None):
                 continue
 
             contents = render_ass_text(p_tags, diagnostics, entry.line)
-            contents = re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', contents)
-            contents = html.unescape(contents)
-
-            if len(contents.strip()) != 0:
+            if final_text:
                 if (sln[line_idx+1].timestamp + 5) // 10 <= (entry.timestamp + 5) // 10:
                     diagnostics.append(ConversionDiagnostic('ZERO_DURATION_CUE', 'skip', entry.line,
                                                             'Cue duration vanishes at ASS centisecond precision.'))
@@ -542,8 +542,11 @@ def smi2ass_internal(sln, diagnostics=None):
 def render_ass_text(node, diagnostics, line, styles=None):
     """Render descendants while restoring the inherited style at each boundary."""
     styles = {} if styles is None else styles
+    if isinstance(node, Comment):
+        return ''
     if isinstance(node, NavigableString):
-        return str(node)
+        # A word joiner keeps literal backslashes from introducing ASS escapes.
+        return str(node).replace('\\', '\\\u2060').replace('{', '\\{').replace('}', '\\}')
     name = node.name
     if name == 'br':
         return '\\N'
@@ -564,9 +567,9 @@ def render_ass_text(node, diagnostics, line, styles=None):
             suffix = '{\\c&H%s&}' % parent_color if parent_color else '{\\c}'
             inherited['color'] = color
     elif name == 'rt':
-        prefix = '{\\fscx50}{\\fscy50}&nbsp;'
+        prefix = '{\\fscx50}{\\fscy50}\u00a0'
         size = 50 if styles.get('rt') else 100
-        suffix = '&nbsp;{\\fscx%d}{\\fscy%d}' % (size, size)
+        suffix = '\u00a0{\\fscx%d}{\\fscy%d}' % (size, size)
         inherited['rt'] = True
     text = ''.join(render_ass_text(child, diagnostics, line, inherited) for child in node.children)
     if not text:
@@ -619,8 +622,8 @@ def separate_by_lang(smi_lines, source, sync_offsets, sync_lines, diagnostics):
             if previous is not None and previous.timestamp == entry.timestamp:
                 incoming = entry.tag.find('p')
                 current = previous.tag.find('p')
-                incoming_text = html.unescape(re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', incoming.get_text())).strip()
-                current_text = html.unescape(re.sub(r'smi2ass_unicode\(([0-9]+)\)', r'&#\1;', current.get_text())).strip()
+                incoming_text = incoming.get_text().strip()
+                current_text = current.get_text().strip()
                 if incoming_text:
                     if current_text:
                         current.append(BeautifulSoup('', 'html.parser').new_tag('br'))
@@ -740,7 +743,7 @@ def main(argv=None):
     for smi_path in args.files:
         try:
             failed = convert_file(smi_path, output_claims=output_claims) or failed
-        except OSError as error:
+        except (OSError, ValueError, RecursionError) as error:
             print('%s: error: %s' % (smi_path, error), file=sys.stderr)
             failed = True
     return 1 if failed else 0

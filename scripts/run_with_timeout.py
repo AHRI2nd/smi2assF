@@ -32,15 +32,19 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
-        return
+        pass
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
+        pass
+    finally:
+        # The parent can exit while descendants ignore SIGTERM. Always finish
+        # terminating our dedicated process group, even after wait() succeeds.
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        process.wait()
+    process.wait()
 
 
 def run_with_timeout(
