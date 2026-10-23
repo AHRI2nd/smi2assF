@@ -28,6 +28,12 @@ def gui_runtime(request):
 def isolated_gui_window(request, monkeypatch):
     if request.path.name not in GUI_MODULES:
         return
+    import smi2ass_gui
+    monkeypatch.setattr(smi2ass_gui, 'load_preferences', lambda: {
+        'overwrite_existing': False,
+        'include_language_suffix': True,
+    })
+    monkeypatch.setattr(smi2ass_gui, 'save_preferences', lambda preferences: True)
     root = request.getfixturevalue('gui_runtime')
     import tkinter as tk
     from tkinterdnd2 import TkinterDnD
