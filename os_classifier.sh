@@ -23,10 +23,22 @@ case "$OS_NAME" in
     esac
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    WINDOWS_ARCH="${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-$ARCH}}"
+    WINDOWS_ARCH="${ACTIONS_RUNNER_ARCH:-}"
+    if [[ -z "$WINDOWS_ARCH" && "${PROCESSOR_ARCHITEW6432:-}" == ARM64 ]]; then
+      WINDOWS_ARCH="$PROCESSOR_ARCHITEW6432"
+    fi
+    if [[ -z "$WINDOWS_ARCH" ]]; then
+      WINDOWS_PYTHON="${PYTHON:-python}"
+      if command -v "$WINDOWS_PYTHON" >/dev/null 2>&1; then
+        WINDOWS_ARCH="$("$WINDOWS_PYTHON" -c 'import platform; print(platform.machine())' 2>/dev/null || true)"
+      fi
+    fi
+    if [[ -z "$WINDOWS_ARCH" ]]; then
+      WINDOWS_ARCH="${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-$ARCH}}"
+    fi
     case "$WINDOWS_ARCH" in
       arm64|ARM64|aarch64|AARCH64) echo windows-arm64 ;;
-      x86_64|X86_64|amd64|AMD64) echo windows-x86_64 ;;
+      x64|X64|x86_64|X86_64|amd64|AMD64) echo windows-x86_64 ;;
       *) echo "Unsupported Windows architecture: $WINDOWS_ARCH" >&2; exit 1 ;;
     esac
     ;;

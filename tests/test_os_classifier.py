@@ -58,7 +58,8 @@ def test_supported_build_targets(system, architecture, returncode, output, error
             _bash_executable(), '--noprofile', '--norc', '-c',
             'uname() { case "$1" in -s) echo "$TEST_SYSTEM" ;; '
             '-m) echo "$TEST_ARCH" ;; esac; }; '
-            'PROCESSOR_ARCHITECTURE="$TEST_ARCH"; PROCESSOR_ARCHITEW6432=""; source "$1"',
+            'ACTIONS_RUNNER_ARCH="$TEST_ARCH"; '
+            'PROCESSOR_ARCHITECTURE=""; PROCESSOR_ARCHITEW6432=""; source "$1"',
             'classifier-test', classifier.as_posix(),
         ],
         capture_output=True,
@@ -81,7 +82,28 @@ def test_windows_host_architecture_takes_priority_over_emulated_shell():
         [
             _bash_executable(), '--noprofile', '--norc', '-c',
             'uname() { case "$1" in -s) echo MSYS_NT-10.0 ;; -m) echo x86_64 ;; esac; }; '
+            'ACTIONS_RUNNER_ARCH=""; '
             'PROCESSOR_ARCHITEW6432=ARM64; PROCESSOR_ARCHITECTURE=AMD64; source "$1"',
+            'classifier-test', classifier.as_posix(),
+        ],
+        capture_output=True,
+        text=True,
+        env=os.environ,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'windows-arm64'
+
+
+def test_windows_native_python_architecture_overrides_emulated_shell():
+    classifier = Path(__file__).resolve().parents[1] / 'os_classifier.sh'
+    result = subprocess.run(
+        [
+            _bash_executable(), '--noprofile', '--norc', '-c',
+            'uname() { case "$1" in -s) echo MSYS_NT-10.0 ;; -m) echo x86_64 ;; esac; }; '
+            'python() { echo ARM64; }; ACTIONS_RUNNER_ARCH=""; '
+            'PROCESSOR_ARCHITEW6432=""; PROCESSOR_ARCHITECTURE=AMD64; source "$1"',
             'classifier-test', classifier.as_posix(),
         ],
         capture_output=True,
