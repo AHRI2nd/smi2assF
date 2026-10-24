@@ -30,6 +30,8 @@ build release files, open **Build release draft**, select **Run workflow**, and
 enter a release tag such as `v1.2.0`. The workflow builds Apple Silicon macOS
 and Windows x86-64 versions from `master`, then creates a draft release. Intel
 Mac builds are not provided.
+Windows ARM64 does not have a native build; ARM compatibility is not an
+advertised release target.
 
 Select **verify_only** to run the same package builds and smoke tests without
 creating a release draft. Windows builds verify installation, the installed app,
@@ -106,10 +108,9 @@ Supported subtitle markup includes `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`,
 
 ## Development
 
-Use Python 3.14 on macOS and Python 3.13 on Windows. Python 3.13 keeps Windows
-Tk on Tcl 8.6, which is required by the bundled drag-and-drop runtime. A Python
-build with Tk support is needed to run the desktop
-interface. Install development dependencies, run the tests, and launch the GUI:
+Use Python 3.14 on macOS and Windows. The Windows release workflow pins Python
+3.14.8. A Python build with Tk support is needed to run the desktop interface.
+Install development dependencies, run the tests, and launch the GUI:
 
 ```sh
 python3.14 -m pip install -r requirements-dev.txt
@@ -117,15 +118,14 @@ python3.14 -m pytest -q
 python3.14 smi2ass_gui.py
 ```
 
-To package the app locally, use Python 3.14 with Tk support on macOS or Python
-3.13 on Windows:
+To package the app locally, use Python 3.14 with Tk support on macOS or Windows:
 
 ```sh
 PYTHON=python3.14 bash install.sh
 bash build.sh
 ```
 
-On Windows, use `PYTHON=python` with Python 3.13 selected in `PATH`.
+On Windows, use `PYTHON=python` with Python 3.14 selected in `PATH`.
 
 The build scripts support Apple Silicon macOS and Windows x86-64. Pushes to
 `master` and pull requests run tests only. The manual release workflow builds
