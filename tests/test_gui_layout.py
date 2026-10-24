@@ -20,7 +20,7 @@ def test_gui_layout_keeps_all_content_visible(monkeypatch, mode, language, size,
         app._apply_theme(mode)
         app.root.geometry(size)
         app._set_drop_state(state, count=99999, total=99999, outputs=88888,
-                            existing=77777, failed=66666, scan_errors=55555)
+                            existing=77777, warnings=44444, failed=66666, scan_errors=55555)
         app.root.update()
         bounds = app.drop_zone.bbox('content')
         assert bounds is not None
@@ -39,7 +39,8 @@ def test_drop_leave_restores_previous_result():
     app = Smi2AssApp()
     try:
         assert isinstance(app.drop_zone, tk.Canvas)
-        app._set_drop_state('done', total=12, outputs=10, existing=2, failed=0, scan_errors=0)
+        app._set_drop_state('done', total=12, outputs=10, existing=2,
+                            warnings=0, failed=0, scan_errors=0)
         app.root.update()
         before = app.drop_zone.itemcget('title', 'text')
         assert app._on_drop_enter(SimpleNamespace()) == 'copy'
@@ -77,12 +78,14 @@ def test_gui_layout_expands_minimum_for_large_font():
         assert isinstance(app.drop_zone, tk.Canvas)
         app.title_font.configure(size=26)
         app.detail_font.configure(size=22)
-        app._set_drop_state('done', total=99999, outputs=88888, existing=77777, failed=0, scan_errors=0)
+        app._set_drop_state('done', total=99999, outputs=88888, existing=77777,
+                            warnings=0, failed=0, scan_errors=0)
         app._update_minimum_size()
         width, height = app.root.minsize()
         assert height > 260
         app.root.geometry(f'{width}x{height}')
-        app._set_drop_state('done', total=99999, outputs=88888, existing=77777, failed=0, scan_errors=0)
+        app._set_drop_state('done', total=99999, outputs=88888, existing=77777,
+                            warnings=0, failed=0, scan_errors=0)
         app.root.update()
         assert app.drop_zone.bbox('content')[3] < app.drop_zone.winfo_height()
     finally:
@@ -103,7 +106,7 @@ def test_actual_result_fits_scaled_fonts(monkeypatch, scale, language, mode, cou
         app.detail_font.configure(size=11)
         app._apply_theme(mode)
         app._set_drop_state('partial', total=count, outputs=count, existing=count,
-                            failed=count, scan_errors=count)
+                            warnings=count, failed=count, scan_errors=count)
         app._update_minimum_size()
         width, height = app.root.minsize()
         app.root.geometry(f'{width}x{height}')
