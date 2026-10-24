@@ -57,7 +57,8 @@ def test_supported_build_targets(system, architecture, returncode, output, error
         [
             _bash_executable(), '--noprofile', '--norc', '-c',
             'uname() { case "$1" in -s) echo "$TEST_SYSTEM" ;; '
-            '-m) echo "$TEST_ARCH" ;; esac; }; source "$1"',
+            '-m) echo "$TEST_ARCH" ;; esac; }; '
+            'PROCESSOR_ARCHITECTURE="$TEST_ARCH"; PROCESSOR_ARCHITEW6432=""; source "$1"',
             'classifier-test', classifier.as_posix(),
         ],
         capture_output=True,
@@ -65,8 +66,6 @@ def test_supported_build_targets(system, architecture, returncode, output, error
         env=os.environ | {
             'TEST_SYSTEM': system,
             'TEST_ARCH': architecture,
-            'PROCESSOR_ARCHITECTURE': architecture,
-            'PROCESSOR_ARCHITEW6432': '',
         },
         check=False,
     )
@@ -81,12 +80,13 @@ def test_windows_host_architecture_takes_priority_over_emulated_shell():
     result = subprocess.run(
         [
             _bash_executable(), '--noprofile', '--norc', '-c',
-            'uname() { case "$1" in -s) echo MSYS_NT-10.0 ;; -m) echo x86_64 ;; esac; }; source "$1"',
+            'uname() { case "$1" in -s) echo MSYS_NT-10.0 ;; -m) echo x86_64 ;; esac; }; '
+            'PROCESSOR_ARCHITEW6432=ARM64; PROCESSOR_ARCHITECTURE=AMD64; source "$1"',
             'classifier-test', classifier.as_posix(),
         ],
         capture_output=True,
         text=True,
-        env=os.environ | {'PROCESSOR_ARCHITEW6432': 'ARM64', 'PROCESSOR_ARCHITECTURE': 'AMD64'},
+        env=os.environ,
         check=False,
     )
 
