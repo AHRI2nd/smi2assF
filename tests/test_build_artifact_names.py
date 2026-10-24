@@ -36,7 +36,7 @@ def test_windows_installer_installs_project_named_app_per_user():
     assert 'DestName: "{#AppExeName}"' in installer_script
     assert '[Icons]' in installer_script
     assert 'Uninstallable=yes' in installer_script
-    assert 'scripts/windows_installer_build.py "$OS_CLASSIFIER"' in build_script
+    assert '-m scripts.windows_installer_build "$OS_CLASSIFIER"' in build_script
     assert 'rm -f "$INSTALLER_PATH" "$INSTALLER_PATH.sha256"' in build_script
     assert '-m scripts.windows_installer_smoke "$INSTALLER_PATH"' in build_script
 
@@ -83,7 +83,7 @@ def test_windows_installer_smoke_is_silent_diagnostic_and_bounded():
     )
 
     assert 'DisableStartupPrompt=yes' in installer_script
-    assert 'scripts/windows_installer_build.py "$OS_CLASSIFIER"' in build_script
+    assert '-m scripts.windows_installer_build "$OS_CLASSIFIER"' in build_script
     assert '-m scripts.windows_installer_smoke "$INSTALLER_PATH"' in build_script
     assert '/VERYSILENT' not in build_script
     assert '/LOG=' not in build_script
