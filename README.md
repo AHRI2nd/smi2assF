@@ -30,8 +30,8 @@ build release files, open **Build release draft**, select **Run workflow**, and
 enter a release tag such as `v1.2.0`. The workflow builds Apple Silicon macOS
 and Windows x86-64 versions from `master`, then creates a draft release. Intel
 Mac builds are not provided.
-Windows ARM64 does not have a native build; ARM compatibility is not an
-advertised release target.
+Windows ARM64 is not a supported target: the x64 installer was rejected in the
+tested Windows 11 ARM64 VM, and no native ARM64 build is provided.
 
 Select **verify_only** to run the same package builds and smoke tests without
 creating a release draft. Windows builds verify installation, the installed app,
