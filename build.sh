@@ -60,8 +60,7 @@ if [[ "$OS_CLASSIFIER" == windows-* ]]; then
   fi
   INSTALLER_PATH="build/gui-dist/$PRODUCT_NAME.$OS_CLASSIFIER.exe"
   rm -f "$INSTALLER_PATH" "$INSTALLER_PATH.sha256"
-  "$VENV_PYTHON" scripts/run_with_timeout.py --timeout-seconds 120 --label "installer compile" -- \
-    ISCC.exe scripts/windows-installer.iss
+  "$VENV_PYTHON" scripts/windows_installer_build.py "$OS_CLASSIFIER"
   test -s "$INSTALLER_PATH"
 
   "$VENV_PYTHON" -m scripts.windows_installer_smoke "$INSTALLER_PATH"

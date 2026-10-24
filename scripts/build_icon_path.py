@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ICON_FILES = {
     'osx-arm64': 'smi2ass.icns',
     'windows-x86_64': 'smi2ass.ico',
+    'windows-arm64': 'smi2ass.ico',
 }
 
 
@@ -22,5 +23,5 @@ def get_build_icon_path(platform):
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
-        raise SystemExit('Usage: build_icon_path.py <osx-arm64|windows-x86_64>')
+        raise SystemExit('Usage: build_icon_path.py <osx-arm64|windows-x86_64|windows-arm64>')
     print(get_build_icon_path(sys.argv[1]))

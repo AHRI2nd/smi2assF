@@ -46,6 +46,8 @@ def test_windows_shell_selection_uses_git_bash_instead_of_wsl(
         ('Darwin', 'x86_64', 1, '', 'Intel Mac builds are not supported'),
         ('Darwin', 'arm64', 0, 'osx-arm64', ''),
         ('MINGW64_NT-10.0', 'x86_64', 0, 'windows-x86_64', ''),
+        ('MINGWARM64_NT-10.0', 'ARM64', 0, 'windows-arm64', ''),
+        ('MSYS_NT-10.0', 'aarch64', 0, 'windows-arm64', ''),
     ],
 )
 def test_supported_build_targets(system, architecture, returncode, output, error):
@@ -60,10 +62,33 @@ def test_supported_build_targets(system, architecture, returncode, output, error
         ],
         capture_output=True,
         text=True,
-        env=os.environ | {'TEST_SYSTEM': system, 'TEST_ARCH': architecture},
+        env=os.environ | {
+            'TEST_SYSTEM': system,
+            'TEST_ARCH': architecture,
+            'PROCESSOR_ARCHITECTURE': architecture,
+            'PROCESSOR_ARCHITEW6432': '',
+        },
         check=False,
     )
 
     assert result.returncode == returncode, result.stderr or result.stdout
     assert result.stdout.strip() == output
     assert error in result.stderr
+
+
+def test_windows_host_architecture_takes_priority_over_emulated_shell():
+    classifier = Path(__file__).resolve().parents[1] / 'os_classifier.sh'
+    result = subprocess.run(
+        [
+            _bash_executable(), '--noprofile', '--norc', '-c',
+            'uname() { case "$1" in -s) echo MSYS_NT-10.0 ;; -m) echo x86_64 ;; esac; }; source "$1"',
+            'classifier-test', classifier.as_posix(),
+        ],
+        capture_output=True,
+        text=True,
+        env=os.environ | {'PROCESSOR_ARCHITEW6432': 'ARM64', 'PROCESSOR_ARCHITECTURE': 'AMD64'},
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'windows-arm64'

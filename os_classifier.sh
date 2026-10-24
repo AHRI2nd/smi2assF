@@ -22,6 +22,13 @@ case "$OS_NAME" in
       *) echo "Unsupported macOS architecture: $ARCH" >&2; exit 1 ;;
     esac
     ;;
-  MINGW*|MSYS*|CYGWIN*) echo windows-x86_64 ;;
+  MINGW*|MSYS*|CYGWIN*)
+    WINDOWS_ARCH="${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-$ARCH}}"
+    case "$WINDOWS_ARCH" in
+      arm64|ARM64|aarch64|AARCH64) echo windows-arm64 ;;
+      x86_64|X86_64|amd64|AMD64) echo windows-x86_64 ;;
+      *) echo "Unsupported Windows architecture: $WINDOWS_ARCH" >&2; exit 1 ;;
+    esac
+    ;;
   *) echo "Unsupported build platform: $OS_NAME ($ARCH)" >&2; exit 1 ;;
 esac

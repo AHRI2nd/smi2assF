@@ -35,7 +35,6 @@ jobs:
 
   windows-runtime:
     name: Windows Python ${{ matrix.python-version }} candidate
-    runs-on: windows-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -43,8 +42,17 @@ jobs:
         include:
           - python-version: '3.13.13'
             python-minor: '3.13'
+            runner: windows-latest
+            python-architecture: x64
           - python-version: '3.14.8'
             python-minor: '3.14'
+            runner: windows-latest
+            python-architecture: x64
+          - python-version: '3.14.8'
+            python-minor: '3.14-arm64'
+            runner: windows-11-arm
+            python-architecture: arm64
+    runs-on: ${{ matrix.runner }}
     env:
       PYTHON: python
       BUILD_PYTHON_VERSION: ${{ matrix.python-minor }}
@@ -55,6 +63,7 @@ jobs:
         uses: actions/setup-python@v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.python-architecture }}
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - name: Prepare the requested runtime

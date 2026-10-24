@@ -158,6 +158,22 @@ def test_existing_installation_checks_both_registry_roots_and_views(monkeypatch,
         assert set(checked) == {('user', 32), ('user', 64), ('machine', 32), ('machine', 64)}
 
 
+def test_arm64_installer_has_its_own_app_registration(monkeypatch):
+    from scripts import windows_installer_smoke as smoke
+    checked = []
+
+    def open_key(root, path, reserved, access):
+        checked.append(path)
+        raise FileNotFoundError(path)
+
+    registry = SimpleNamespace(HKEY_CURRENT_USER='user', HKEY_LOCAL_MACHINE='machine',
+                               KEY_READ=0, KEY_WOW64_32KEY=32, KEY_WOW64_64KEY=64, OpenKey=open_key)
+    monkeypatch.setitem(sys.modules, 'winreg', registry)
+    monkeypatch.setattr(smoke.sys, 'platform', 'win32')
+    assert smoke.existing_installation('windows-arm64') is False
+    assert all(path.endswith(r'{AF94EC15-0A57-4072-B235-340D690F2C58}_is1') for path in checked)
+
+
 def test_registry_query_failure_is_not_treated_as_absent(monkeypatch):
     from scripts import windows_installer_smoke as smoke
     def open_key(*args):

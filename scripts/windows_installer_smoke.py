@@ -16,18 +16,21 @@ from scripts.run_with_timeout import run_with_timeout
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+WINDOWS_INSTALLER_APP_IDS = {
+    'windows-x86_64': '{D037DE16-5DD8-4E87-8C9D-5A4D19B6E2A1}',
+    'windows-arm64': '{AF94EC15-0A57-4072-B235-340D690F2C58}',
+}
 
 
-def existing_installation() -> bool:
+def existing_installation(target='windows-x86_64') -> bool:
     """Refuse production installer smoke when its AppId is already registered."""
     if sys.platform != 'win32':
         return False
     import winreg
-    # Read the compiler input so the guard follows changes to the actual AppId.
-    setup = (PROJECT_ROOT / 'scripts' / 'windows-installer.iss').read_text(encoding='utf-8')
-    app_id = next(line.split('=', 1)[1].strip() for line in setup.splitlines()
-                  if line.startswith('AppId='))
-    app_id = app_id.replace('{{', '{', 1)
+    try:
+        app_id = WINDOWS_INSTALLER_APP_IDS[target]
+    except KeyError as error:
+        raise ValueError('Unsupported Windows installer target: %s' % target) from error
     key = rf'Software\Microsoft\Windows\CurrentVersion\Uninstall\{app_id}_is1'
     for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
         for view in (winreg.KEY_WOW64_32KEY, winreg.KEY_WOW64_64KEY):
@@ -123,7 +126,8 @@ def _smoke_test_installer(
     if log_dir.is_relative_to(install_dir):
         raise ValueError('Installer diagnostics must be outside the installation directory')
     install_dir = _validate_install_directory(raw_install_dir, Path(workspace_root))
-    checker = installation_checker or existing_installation
+    target = 'windows-arm64' if installer_path.name.endswith('windows-arm64.exe') else 'windows-x86_64'
+    checker = installation_checker or (lambda: existing_installation(target))
     if checker():
         raise RuntimeError('Existing smi2assF installation detected; use a clean Windows user or VM for verification')
     if install_dir.exists():

@@ -25,13 +25,12 @@ as a command-line interface.
 
 Run a build from the repository's
 [GitHub Actions](https://github.com/AHRI2nd/smi2assF/actions) page. The
-**CI checks** workflow runs tests on pushes to `master` and pull requests. To
+**CI checks** workflow runs tests and Windows package lifecycle checks on pushes
+to `master` and pull requests. To
 build release files, open **Build release draft**, select **Run workflow**, and
 enter a release tag such as `v1.2.0`. The workflow builds Apple Silicon macOS
-and Windows x86-64 versions from `master`, then creates a draft release. Intel
-Mac builds are not provided.
-Windows ARM64 is not a supported target: the x64 installer was rejected in the
-tested Windows 11 ARM64 VM, and no native ARM64 build is provided.
+and separate native Windows x86-64 and ARM64 versions from `master`, then
+creates a draft release. Intel Mac builds are not provided.
 
 Select **verify_only** to run the same package builds and smoke tests without
 creating a release draft. Windows builds verify installation, the installed app,
@@ -41,21 +40,24 @@ on both successful and failed runs.
 | Artifact | Build |
 | --- | --- |
 | `smi2assF.osx-arm64.dmg` | macOS disk image containing `smi2assF.app` |
-| `smi2assF.windows-x86_64.exe` | Windows installer that installs `smi2assF.exe` |
+| `smi2assF.windows-x86_64.exe` | Native Windows x86-64 installer |
+| `smi2assF.windows-arm64.exe` | Native Windows ARM64 installer |
 | `*.sha256` | SHA-256 checksums for the release files |
 
 Actions artifacts are uploaded as individual files without ZIP packaging.
-Download the `.dmg` or `.exe` directly. The draft release also contains these
-files and their checksums as direct downloads.
+Download the file for your operating system and processor architecture. The
+draft release also contains all three installers and their checksums as direct
+downloads.
 Review the draft and publish it from the
 [Releases page](https://github.com/AHRI2nd/smi2assF/releases) when it is ready.
 
 ## Use the desktop app
 
-1. Open `smi2assF.app` on macOS. On Windows, run
-   `smi2assF.windows-x86_64.exe` to install the app, then launch `smi2assF`
-   from the Start menu. The installer places `smi2assF.exe` in your local
-   `%LOCALAPPDATA%\Programs\smi2assF` folder and adds an uninstaller.
+1. Open `smi2assF.app` on macOS. On Windows, run the matching
+   `smi2assF.windows-x86_64.exe` or `smi2assF.windows-arm64.exe` installer,
+   then launch `smi2assF`
+   from the Start menu. The x86-64 and ARM64 installers use separate folders
+   under `%LOCALAPPDATA%\Programs` and each adds its own uninstaller.
 2. Drag `.smi` or `.SMI` files or folders into the drop area. Conversion starts
    immediately, and results are written beside each source file.
 3. Turn on **기존 ASS 파일 덮어쓰기** at the bottom only when existing outputs
@@ -127,10 +129,10 @@ bash build.sh
 
 On Windows, use `PYTHON=python` with Python 3.14 selected in `PATH`.
 
-The build scripts support Apple Silicon macOS and Windows x86-64. Pushes to
-`master` and pull requests run tests only. The manual release workflow builds
-both applications from `master`, runs the test suite, smoke-tests each app, and
-creates a draft release with SHA-256 checksums.
+The build scripts support Apple Silicon macOS, Windows x86-64, and Windows
+ARM64. The manual release workflow builds all three packages from `master`, runs
+the test suite, smoke-tests each app, and creates a draft release with SHA-256
+checksums.
 Enable **verify_only** when validating packaging changes without creating a draft.
 
 ## Project lineage and credits

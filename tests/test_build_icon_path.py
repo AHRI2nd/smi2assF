@@ -13,6 +13,12 @@ def test_windows_build_icon_path_is_absolute_from_project_root():
         PROJECT_ROOT / 'assets' / 'smi2ass.ico'
     ).resolve()
     assert icon_path.is_absolute()
+
+
+def test_windows_arm64_build_uses_windows_icon():
+    icon_path = get_build_icon_path('windows-arm64')
+
+    assert icon_path == (Path(__file__).resolve().parents[1] / 'assets' / 'smi2ass.ico')
     assert icon_path.is_file()
 
 
