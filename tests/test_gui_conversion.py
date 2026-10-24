@@ -71,6 +71,22 @@ def test_repair_and_color_warning_with_output_are_not_failures(tmp_path):
     assert summary.outputs == 1 and summary.failed == 0
 
 
+def test_subcentisecond_transition_is_reported_as_a_warning_not_a_failure(tmp_path):
+    source = tmp_path / 'karaoke.smi'
+    source.write_text(
+        '<SYNC Start=1345><P Class=KRCC><font color="red">EARLY</font>'
+        '<SYNC Start=1349><P Class=KRCC><font color="blue">LATEST</font>'
+        '<SYNC Start=2000><P Class=KRCC>&nbsp;',
+        encoding='utf-8',
+    )
+
+    summary = convert_smi_files([source])
+
+    assert summary.outputs == 1
+    assert summary.warnings == 1
+    assert summary.failed == 0
+
+
 def test_unreadable_input_does_not_stop_other_files(tmp_path):
     source = tmp_path / 'good.smi'
     source.write_text('<SYNC Start=0><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;', encoding='utf-8')

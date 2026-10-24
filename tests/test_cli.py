@@ -70,11 +70,13 @@ def test_all_blank_input_fails_cli_and_gui(tmp_path):
     assert result.returncode == 1
 
 
-def test_partial_output_is_nonzero_cli(tmp_path):
+def test_subcentisecond_state_is_nonfatal_cli(tmp_path):
     source = tmp_path / 'partial.smi'
     source.write_text('<SYNC Start=0><P Class=KRCC>Too short<SYNC Start=1><P Class=KRCC>Keep<SYNC Start=1000><P Class=KRCC>&nbsp;')
     result = run_cli(source, cwd=tmp_path)
-    assert result.returncode == 1
+    assert result.returncode == 0
+    assert '[warning]' in result.stderr
+    assert 'skipped 0' in result.stderr
     assert 'Keep' in (tmp_path / 'partial.kor.ass').read_text()
 
 

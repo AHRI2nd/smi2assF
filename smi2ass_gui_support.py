@@ -24,14 +24,14 @@ UI_TEXT = {
         'status_empty_title': '.smi 파일을 찾지 못했습니다',
         'status_scan_title': '파일을 읽지 못했습니다',
         'drop_again': '.smi 파일이나 폴더를 다시 놓으세요',
-        'result_summary': '대상 {total} · ASS 생성 {outputs}\n기존 ASS 유지 {existing}\n오류 {failed} · 읽기 실패 {scan_errors}',
+        'result_summary': '대상 {total} · ASS 생성 {outputs}\n기존 ASS 유지 {existing}\n경고 {warnings} · 오류 {failed} · 읽기 실패 {scan_errors}',
         'overwrite': '기존 ASS 파일 덮어쓰기',
         'language_suffix': '파일명에 언어 코드(.kor) 표시',
         'status_busy_add': '변환이 끝날 때까지 기다려 주세요.',
         'status_no_files': '.smi 또는 .SMI 파일을 찾지 못했습니다.',
         'status_scan_errors': '{count}개 위치에서 파일을 읽지 못했습니다.',
         'status_converting': '{count}개 파일을 변환하고 있습니다…',
-        'status_done': '완료: {total}개 파일 · ASS 생성 {outputs}개 · 기존 파일 유지 {existing}개 · 오류 {failed}개 · 읽기 실패 {scan_errors}개',
+        'status_done': '완료: {total}개 파일 · ASS 생성 {outputs}개 · 기존 파일 유지 {existing}개 · 경고 {warnings}개 · 오류 {failed}개 · 읽기 실패 {scan_errors}개',
         'dialog_busy_title': '변환 중',
         'dialog_busy_message': '변환이 끝난 뒤 앱을 닫아 주세요.',
     },
@@ -50,14 +50,14 @@ UI_TEXT = {
         'status_empty_title': 'No .smi files found',
         'status_scan_title': 'Could not read files',
         'drop_again': 'Drop .smi files or folders to try again',
-        'result_summary': 'Files {total} · ASS {outputs}\nKept {existing}\nErrors {failed} · Unreadable {scan_errors}',
+        'result_summary': 'Files {total} · ASS {outputs}\nKept {existing}\nWarnings {warnings} · Errors {failed} · Unreadable {scan_errors}',
         'overwrite': 'Overwrite existing ASS files',
         'language_suffix': 'Include language code (.kor) in filenames',
         'status_busy_add': 'Wait for the current conversion to finish.',
         'status_no_files': 'No .smi or .SMI files found.',
         'status_scan_errors': 'Could not read files from {count} location(s).',
         'status_converting': 'Converting {count} file(s)…',
-        'status_done': 'Complete: {total} file(s) · created {outputs} ASS file(s) · kept {existing} existing file(s) · errors {failed} · unreadable locations {scan_errors}',
+        'status_done': 'Complete: {total} file(s) · created {outputs} ASS file(s) · kept {existing} existing file(s) · warnings {warnings} · errors {failed} · unreadable locations {scan_errors}',
         'dialog_busy_title': 'Conversion in progress',
         'dialog_busy_message': 'Wait for conversion to finish before closing the app.',
     },
@@ -105,6 +105,7 @@ class SmiConversionSummary:
     outputs: int
     existing: int
     failed: int
+    warnings: int = 0
 
 
 def convert_smi_files(paths, overwrite=False, include_language_suffix=True):
@@ -112,7 +113,7 @@ def convert_smi_files(paths, overwrite=False, include_language_suffix=True):
     from smi2ass import convert_smi_file, has_conversion_problem
 
     output_claims = {}
-    outputs = existing = failed = 0
+    outputs = existing = failed = warnings = 0
     paths = tuple(paths)
     for path in paths:
         try:
@@ -125,10 +126,11 @@ def convert_smi_files(paths, overwrite=False, include_language_suffix=True):
             continue
         outputs += len(result.outputs)
         existing += len(result.skipped_existing)
+        warnings += sum(item.severity == 'warning' for item in result.diagnostics)
         if has_conversion_problem(result):
             failed += 1
     return SmiConversionSummary(
-        total=len(paths), outputs=outputs, existing=existing, failed=failed,
+        total=len(paths), outputs=outputs, existing=existing, failed=failed, warnings=warnings,
     )
 
 

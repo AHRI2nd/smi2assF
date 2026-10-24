@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from smi2ass import convert_smi, ms2timecode
+from smi2ass import convert_smi, main, ms2timecode
 
 
 @pytest.mark.parametrize(
@@ -104,10 +104,30 @@ def test_nested_underline_strike_break_and_ruby():
 
 
 @pytest.mark.parametrize('end', [1, 4])
-def test_quantized_zero_duration_is_skipped(end):
+def test_quantized_zero_duration_is_a_nonfatal_warning(end):
     outputs, diagnostics = convert_smi('<SYNC Start=0><P Class=KRCC>Too short<SYNC Start=%d><P Class=KRCC>&nbsp;' % end)
     assert not any(b'Dialogue:' in output for output in outputs.values())
-    assert any(d.code == 'ZERO_DURATION_CUE' and d.severity == 'skip' for d in diagnostics)
+    assert any(d.code == 'ZERO_DURATION_CUE' and d.severity == 'warning' for d in diagnostics)
+
+
+def test_subcentisecond_color_transition_keeps_the_later_state(tmp_path, capsys):
+    source = tmp_path / 'karaoke.smi'
+    source.write_text(
+        '<SYNC Start=1345><P Class=KRCC><font color="red">EARLY</font>'
+        '<SYNC Start=1349><P Class=KRCC><font color="blue">LATEST</font>'
+        '<SYNC Start=2000><P Class=KRCC>&nbsp;',
+        encoding='utf-8',
+    )
+
+    assert main([str(source)]) == 0
+    captured = capsys.readouterr()
+    output = (tmp_path / 'karaoke.kor.ass').read_text(encoding='utf-8')
+
+    assert 'Dialogue: 0,0:00:01.35,0:00:02.00,' in output
+    assert r'{\c&Hff0000&}LATEST{\c}' in output
+    assert 'EARLY' not in output
+    assert '[warning]' in captured.err
+    assert 'skipped 0' in captured.err
 
 
 def test_centisecond_boundary_remains_valid():

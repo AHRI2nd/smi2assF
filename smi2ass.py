@@ -530,8 +530,12 @@ def smi2ass_internal(sln, diagnostics=None):
             contents = render_ass_text(p_tags, diagnostics, entry.line)
             if final_text:
                 if (sln[line_idx+1].timestamp + 5) // 10 <= (entry.timestamp + 5) // 10:
-                    diagnostics.append(ConversionDiagnostic('ZERO_DURATION_CUE', 'skip', entry.line,
-                                                            'Cue duration vanishes at ASS centisecond precision.'))
+                    diagnostics.append(ConversionDiagnostic(
+                        'ZERO_DURATION_CUE', 'warning', entry.line,
+                        'Omitted this %d ms state because it rounds to the same ASS centisecond; '
+                        'the following state is retained.' %
+                        (sln[line_idx+1].timestamp - entry.timestamp),
+                    ))
                     continue
                 line = 'Dialogue: 0,%s,%s,Default,,0000,0000,0000,,%s\n' % (tcstart,tcend, contents)
                 ass_lines.append(line)

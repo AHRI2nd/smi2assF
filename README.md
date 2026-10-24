@@ -97,7 +97,9 @@ Cues with missing, negative, or ambiguous timestamps are skipped while other
 cues and input files continue. Unsupported font colors are reported and left
 unapplied. The app shows repair, skip, and file-error details in its history;
 the CLI prints diagnostics and returns a nonzero status if a cue was skipped or
-a file could not be processed.
+a file could not be processed. SMI states shorter than ASS's 10 ms timestamp
+precision are collapsed to the following state at that centisecond and shown
+as warnings; they do not fail an otherwise successful conversion.
 
 Supported subtitle markup includes `<p>`, `<br>`, `<b>`, `<i>`, `<u>`, `<s>`,
 `<font>`, and `<rt>` (Ruby tags).

@@ -16,11 +16,11 @@ def test_localized_text_uses_korean_or_english_copy():
     assert localized_text('drop_hint', 'en') == 'Drop .smi files here'
 
 
-def test_gui_result_copy_preserves_all_five_counts():
+def test_gui_result_copy_preserves_all_six_counts():
     for language in ('ko', 'en'):
         result = localized_text('result_summary', language, total=12, outputs=34,
-                                existing=56, failed=78, scan_errors=90)
-        for count in ('12', '34', '56', '78', '90'):
+                                existing=56, warnings=67, failed=78, scan_errors=90)
+        for count in ('12', '34', '56', '67', '78', '90'):
             assert count in result
         assert len(result.splitlines()) == 3
 

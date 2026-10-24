@@ -319,14 +319,15 @@ class Smi2AssApp:
                 self._set_drop_state('scan_error' if event[1] else 'empty', count=event[1])
             elif kind == 'error':
                 self._set_drop_state('failed', total=event[1], outputs=0, existing=0,
-                                     failed=max(1, event[1]), scan_errors=event[2])
+                                     warnings=0, failed=max(1, event[1]), scan_errors=event[2])
             elif kind == 'done':
                 summary, scan_errors = event[1], event[2]
                 state = 'done'
                 if summary.failed or scan_errors:
                     state = 'partial' if summary.outputs or summary.existing else 'failed'
                 self._set_drop_state(state, total=summary.total, outputs=summary.outputs,
-                                     existing=summary.existing, failed=summary.failed, scan_errors=scan_errors)
+                                     existing=summary.existing, warnings=summary.warnings,
+                                     failed=summary.failed, scan_errors=scan_errors)
         if self.busy:
             self._poll_id = self.root.after(75, self._poll_worker)
 
